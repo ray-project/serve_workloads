@@ -1,7 +1,7 @@
-import_path: receiver:graph
+import_path: chaos_test.receiver:graph
 
 runtime_env:
-  working_dir: https://github.com/ray-project/serve_workloads/archive/f1ae1d1b91a8a3faeee635364b0b6841f959695f.zip
+  working_dir: https://github.com/ray-project/serve_workloads/archive/2e2bb93b1d399c84f7a3142991c59a9ca6034f96.zip
   env_vars:
     RAY_SERVE_REQUEST_PROCESSING_TIMEOUT_S: '1'
 
@@ -18,3 +18,5 @@ deployments:
   num_replicas: 3
   ray_actor_options:
     num_cpus: 0
+    resources:
+      node_singleton: 1
