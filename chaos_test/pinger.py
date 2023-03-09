@@ -8,6 +8,8 @@ from chaos_test.constants import RECEIVER_KILL_KEY, KillOptions
 
 from ray import serve
 from ray.util.metrics import Counter, Gauge
+from ray._private.utils import run_background_task
+
 
 # These options should get overwritten in the Serve config with a real
 # authentication token and URL.
@@ -131,6 +133,7 @@ class Pinger:
         if config.get("default_on", 0) == 1:
             print("Pinger is default on.")
             self.live = True
+            run_background_task(self.run_request_loop())
         else:
             print("Pinger is default off.")
 
@@ -145,52 +148,55 @@ class Pinger:
         else:
             print(f'Starting to send requests to URL "{self.target_url}"')
             self.live = True
-            while self.live:
-                json_payload = {RECEIVER_KILL_KEY: KillOptions.SPARE}
+            await self.run_request_loop()
+    
+    async def run_request_loop(self):
+        while self.live:
+            json_payload = {RECEIVER_KILL_KEY: KillOptions.SPARE}
+            if self.send_kill_request():
+                print("Sending kill request.")
+                json_payload = {RECEIVER_KILL_KEY: KillOptions.KILL}
+                self.kill_counter.inc()
+
+            start_time = time.time()
+            try:
+                response = requests.post(
+                    self.target_url,
+                    headers={"Authorization": f"Bearer {self.bearer_token}"},
+                    json=json_payload,
+                    timeout=3,
+                )
+                latency = time.time() - start_time
+
+                self.request_counter.inc()
                 if self.send_kill_request():
-                    print("Sending kill request.")
-                    json_payload = {RECEIVER_KILL_KEY: KillOptions.KILL}
-                    self.kill_counter.inc()
-
-                start_time = time.time()
-                try:
-                    response = requests.post(
-                        self.target_url,
-                        headers={"Authorization": f"Bearer {self.bearer_token}"},
-                        json=json_payload,
-                        timeout=3,
+                    self.count_successful_request(kill_request=True)
+                    self.success_counter.inc()
+                elif response.status_code == 200:
+                    self.count_successful_request()
+                    self.latency_gauge.set(latency)
+                    self.success_counter.inc()
+                else:
+                    self.count_failed_request(
+                        response.status_code, reason=response.text
                     )
-                    latency = time.time() - start_time
-
-                    self.request_counter.inc()
-                    if self.send_kill_request():
-                        self.count_successful_request(kill_request=True)
-                        self.success_counter.inc()
-                    elif response.status_code == 200:
-                        self.count_successful_request()
-                        self.latency_gauge.set(latency)
-                        self.success_counter.inc()
-                    else:
-                        self.count_failed_request(
-                            response.status_code, reason=response.text
-                        )
-                        self.fail_counter.inc()
-                        self.increment_error_counter(response.status_code)
-                    if self.current_num_requests % 3 == 0:
-                        print(
-                            f"{time.strftime('%b %d – %l:%M%p: ')}"
-                            f"Sent {self.current_num_requests} "
-                            f'requests to "{self.target_url}".'
-                        )
-                except Exception as e:
-                    self.count_failed_request(-1, reason=repr(e))
                     self.fail_counter.inc()
+                    self.increment_error_counter(response.status_code)
+                if self.current_num_requests % 3 == 0:
                     print(
                         f"{time.strftime('%b %d – %l:%M%p: ')}"
-                        f"Got exception: \n{repr(e)}"
+                        f"Sent {self.current_num_requests} "
+                        f'requests to "{self.target_url}".'
                     )
+            except Exception as e:
+                self.count_failed_request(-1, reason=repr(e))
+                self.fail_counter.inc()
+                print(
+                    f"{time.strftime('%b %d – %l:%M%p: ')}"
+                    f"Got exception: \n{repr(e)}"
+                )
 
-                await asyncio.sleep(0.05)
+            await asyncio.sleep(0.05)
 
     @app.get("/stop")
     def stop_requesting(self):
