@@ -4,7 +4,7 @@ import asyncio
 import subprocess
 from starlette.requests import Request
 
-from constants import RECEIVER_KILL_KEY, KillOptions
+from chaos_test.constants import RECEIVER_KILL_KEY, KillOptions
 
 import ray
 from ray import serve

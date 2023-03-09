@@ -4,7 +4,7 @@ import requests
 from typing import Dict
 from fastapi import FastAPI
 
-from constants import RECEIVER_KILL_KEY, KillOptions
+from chaos_test.constants import RECEIVER_KILL_KEY, KillOptions
 
 from ray import serve
 from ray.util.metrics import Counter, Gauge
