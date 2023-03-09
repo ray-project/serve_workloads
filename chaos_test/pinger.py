@@ -25,7 +25,7 @@ app = FastAPI()
         "target_url": DEFAULT_TARGET_URL,
         "bearer_token": DEFAULT_BEARER_TOKEN,
         "kill_interval": DEFAULT_KILL_INTERVAL,
-        "default_on": False,
+        "default_on": 0,  # 1 to enable, 0 to disable
     },
 )
 @serve.ingress(app)
@@ -128,8 +128,11 @@ class Pinger:
         )
         self.bearer_token = new_bearer_token
 
-        if config.get("default_on", False):
+        if config.get("default_on", 0) == 1:
+            print("Pinger is default on.")
             self.live = True
+        else:
+            print("Pinger is default off.")
 
     @app.get("/")
     def root(self):
