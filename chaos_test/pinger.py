@@ -88,28 +88,28 @@ class Pinger:
             description="Number of 404 HTTP response errors received.",
             tag_keys=("class",),
         )
-        self.kill_counter.set_default_tags({"class": "Pinger"})
+        self.error404.set_default_tags({"class": "Pinger"})
 
         self.error500 = Counter(
             "pinger_500",
             description="Number of 500 HTTP response errors received.",
             tag_keys=("class",),
         )
-        self.kill_counter.set_default_tags({"class": "Pinger"})
+        self.error500.set_default_tags({"class": "Pinger"})
 
         self.error502 = Counter(
             "pinger_502",
             description="Number of 502 HTTP response errors received.",
             tag_keys=("class",),
         )
-        self.kill_counter.set_default_tags({"class": "Pinger"})
+        self.error502.set_default_tags({"class": "Pinger"})
 
         self.error_other = Counter(
             "pinger_http_response_other_error",
             description="Number of other HTTP response errors received.",
             tag_keys=("class",),
         )
-        self.kill_counter.set_default_tags({"class": "Pinger"})
+        self.error_other.set_default_tags({"class": "Pinger"})
 
     def reconfigure(self, config: Dict):
         self.stop_requesting()
