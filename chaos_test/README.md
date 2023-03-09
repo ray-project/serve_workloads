@@ -34,9 +34,9 @@ are intentionally killed periodically.
 
 ## Instructions to run the workload
 
-1. Launch the `Receiver` service. Its Serve config is in `receiver_config.yaml`.
+1. Launch the `Receiver` service. Its Serve config is in [`receiver_config.yaml`](receiver_config.yaml).
 2. Get the `Receiver` service's URL and any authentication token needed to access it.
 You can omit the authentication token in the config if your `Receiver` doesn't need one.
-4. Launch the `Pinger` service using `pinger_config.yaml`.
+4. Launch the `Pinger` service using [`pinger_config.yaml`](pinger_config.yaml).
 5. Start the `Pinger` service by making a `GET` request to its `/start` endpoint. This request will hang, so you need to kill it after a couple seconds. The `Pinger` service should now be querying the `Receiver`.
 6. You can check `Pinger`'s metrics either through a Grafana dashboard or by sending a `GET` request to its `/info` endpoint.
