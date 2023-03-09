@@ -1,0 +1,22 @@
+# Make sure to fill in your target_url and bearer_token. See README.
+
+import_path: pinger:graph
+
+runtime_env:
+  working_dir: https://github.com/ray-project/serve_workloads/archive/f1ae1d1b91a8a3faeee635364b0b6841f959695f.zip
+  env_vars:
+    RAY_SERVE_REQUEST_PROCESSING_TIMEOUT_S: '1'
+
+host: 0.0.0.0
+
+port: 8000
+
+deployments:
+- name: Pinger
+  num_replicas: 1
+  user_config:
+    target_url: YOUR_RECEIVER_URL
+    bearer_token: YOUR_RECEIVER_BEARER_TOKEN
+    kill_interval: 1500
+  ray_actor_options:
+    num_cpus: 1

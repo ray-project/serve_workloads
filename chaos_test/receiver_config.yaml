@@ -1,0 +1,20 @@
+import_path: receiver:graph
+
+runtime_env:
+  working_dir: https://github.com/ray-project/serve_workloads/archive/f1ae1d1b91a8a3faeee635364b0b6841f959695f.zip
+  env_vars:
+    RAY_SERVE_REQUEST_PROCESSING_TIMEOUT_S: '1'
+
+host: 0.0.0.0
+
+port: 8000
+
+deployments:
+- name: NodeKiller
+  num_replicas: 1
+  ray_actor_options:
+    num_cpus: 0
+- name: Receiver
+  num_replicas: 3
+  ray_actor_options:
+    num_cpus: 0
