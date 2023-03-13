@@ -149,7 +149,7 @@ class Pinger:
             print(f'Starting to send requests to URL "{self.target_url}"')
             self.live = True
             await self.run_request_loop()
-    
+
     async def run_request_loop(self):
         while self.live:
             json_payload = {RECEIVER_KILL_KEY: KillOptions.SPARE}
