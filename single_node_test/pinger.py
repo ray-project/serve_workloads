@@ -142,7 +142,7 @@ class Pinger:
                     self.target_url,
                     headers={"Authorization": f"Bearer {self.bearer_token}"},
                     json=json_payload,
-                    timeout=3,
+                    timeout=5,
                 )
                 latency = time.time() - start_time
 
@@ -171,7 +171,7 @@ class Pinger:
                     f"Got exception: \n{repr(e)}"
                 )
 
-            await asyncio.sleep(0.05)
+            await asyncio.sleep(5)
 
     @app.get("/stop")
     def stop_requesting(self):
