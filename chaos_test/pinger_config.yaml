@@ -1,9 +1,9 @@
-# Make sure to fill in your target_url and bearer_token. See README.
+# Make sure to fill in your receiver_url and bearer_token. See README.
 
 import_path: chaos_test.pinger:graph
 
 runtime_env:
-  working_dir: https://github.com/ray-project/serve_workloads/archive/2e2bb93b1d399c84f7a3142991c59a9ca6034f96.zip
+  working_dir: https://github.com/ray-project/serve_workloads/archive/4d33a075ff1a221e9033cd8ae4627a99efa2feca.zip
   env_vars:
     RAY_SERVE_REQUEST_PROCESSING_TIMEOUT_S: '1'
 
@@ -15,9 +15,16 @@ deployments:
 - name: Pinger
   num_replicas: 1
   user_config:
-    target_url: YOUR_RECEIVER_URL
+    receiver_url: YOUR_RECEIVER_URL
     bearer_token: YOUR_RECEIVER_BEARER_TOKEN
-    kill_interval: 1500
-    default_on: 1
+    max_qps: 100
   ray_actor_options:
-    num_cpus: 1
+    num_cpus: 0
+- name: Reaper
+  num_replicas: 1
+  user_config:
+    receiver_url: YOUR_RECEIVER_URL
+    bearer_token: YOUR_RECEIVER_BEARER_TOKEN
+    kill_interval_s: 300
+  ray_actor_options:
+    num_cpus: 0
