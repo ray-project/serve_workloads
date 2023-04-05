@@ -494,7 +494,7 @@ class ReceiverHelmsman:
         get_url = f"https://console.anyscale-staging.com/api/v2/services-v2/{self.receiver_service_id}"
         try:
             response = requests.get(get_url, headers={"Cookie": self.cookie})
-            receiver_status = response.json()["current_state"]
+            receiver_status = response.json()["result"]["current_state"]
             if (
                 self.latest_receiver_status is not None
                 and self.latest_receiver_status != receiver_status
