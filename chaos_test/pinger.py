@@ -182,7 +182,7 @@ class Pinger:
                         )
                         self.fail_counter.inc()
                         self._increment_error_counter(status_code)
-                if self.current_num_requests % 100 == 0:
+                if self.current_num_requests % (self.max_qps * 10) == 0:
                     print(
                         f"{time.strftime('%b %d – %l:%M%p: ')}"
                         f"Sent {self.current_num_requests} "
