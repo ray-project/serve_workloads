@@ -17,7 +17,9 @@ from ray._private.utils import run_background_task
 # These options should get overwritten in the Serve config with a real
 # authentication token and URL.
 DEFAULT_BEARER_TOKEN = "default"
-DEFAULT_RECEIVER_URL = "http://localhost:8000/"
+DEFAULT_RECEIVER_URL = "http://localhost:8000/fail"
+DEFAULT_RECEIVER_SERVICE_ID = "default"
+DEFAULT_COOKIE = ""
 DEFAULT_KILL_INTERVAL_S = 300  # In seconds
 DEFAULT_MAX_QPS = 100
 
@@ -189,7 +191,7 @@ class Pinger:
             await self._drain_requests()
             print("Stopped Pinger. Call start() to start.")
         else:
-            print("Called stop() while Pinger was already stoppped. Nothing changed.")
+            print("Called stop() while Pinger was already stopped. Nothing changed.")
         self._reset_current_counters()
 
     def get_info(self):
@@ -314,7 +316,8 @@ class Pinger:
         trace_config.on_request_end.append(on_request_end)
 
         return RetryClient(
-            retry_options=ExponentialRetry(attempts=5), trace_configs=[trace_config]
+            retry_options=ExponentialRetry(attempts=5, start_timeout=0.1, factor=2),
+            trace_configs=[trace_config],
         )
 
     async def _drain_requests(self):
@@ -401,7 +404,7 @@ class Reaper:
             self.kill_loop_task = None
             print("Stopped Reaper. Call start() to start.")
         else:
-            print("Called stop() while Reaper was already stoppped. Nothing changed.")
+            print("Called stop() while Reaper was already stopped. Nothing changed.")
         self.current_kill_requests = 0
 
     def get_info(self) -> Dict[str, int]:
@@ -414,6 +417,93 @@ class Reaper:
     def _initialize_stats(self):
         self.total_kill_requests = 0
         self.current_kill_requests = 0
+
+
+@serve.deployment(
+    num_replicas=1,
+    user_config={
+        "receiver_service_id": DEFAULT_RECEIVER_SERVICE_ID,
+        "cookie": DEFAULT_COOKIE,
+    },
+    ray_actor_options={"num_cpus": 0},
+)
+class ReceiverHelmsman:
+    def __init__(self):
+        self.receiver_service_id = ""
+        self.cookie = ""
+        self.manage_loop_task = None
+        self._initialize_metrics()
+        self.latest_receiver_status = None
+
+    def reconfigure(self, config: Dict):
+        new_receiver_service_id = config.get(
+            "receiver_service_id", DEFAULT_RECEIVER_SERVICE_ID
+        )
+        print(
+            f'Changing receiver service ID from "{self.receiver_service_id}" to "{new_receiver_service_id}"'
+        )
+        self.receiver_service_id = new_receiver_service_id
+
+        new_cookie = config.get("cookie", DEFAULT_COOKIE)
+        print(f'Changing cookie from "{self.cookie}" to "{new_cookie}"')
+        self.cookie = new_cookie
+
+        self.start()
+
+    async def run_manage_loop(self):
+        while True:
+            self._log_receiver_status()
+            await asyncio.sleep(5)
+
+    def start(self):
+        if self.manage_loop_task is not None:
+            print(
+                "Called start() while ReceiverHelmsman is already running. Nothing changed."
+            )
+        else:
+            self.manage_loop_task = run_background_task(self.run_manage_loop())
+            print("Started ReceiverHelmsman. Call stop() to stop.")
+
+    def stop(self):
+        if self.manage_loop_task is not None:
+            self.manage_loop_task.cancel()
+            self.manage_loop_task = None
+            print("Stopped ReceiverHelmsman. Call start() to start.")
+        else:
+            print(
+                "Called stop() while ReceiverHelmsman was already stopped. Nothing changed."
+            )
+        self.current_kill_requests = 0
+
+    def _initialize_metrics(self):
+        self.receiver_status_gauge = Gauge(
+            "pinger_request_latency",
+            description="Latency of last successful request.",
+            tag_keys=("class", "status"),
+        ).set_default_tags({"class": "ReceiverHelmsman"})
+
+    def _log_receiver_status(self):
+        get_url = f"https://console.anyscale-staging.com/api/v2/services-v2/{self.receiver_service_id}"
+        try:
+            response = requests.get(get_url, headers={"Cookie": self.cookie})
+            receiver_status = response.json()["current_state"]
+            if (
+                self.latest_receiver_status is not None
+                and self.latest_receiver_status != receiver_status
+            ):
+                self.receiver_status_gauge.set(
+                    0,
+                    tags={
+                        "class": "ReceiverHelmsman",
+                        "status": self.latest_receiver_status,
+                    },
+                )
+            self.receiver_status_gauge.set(
+                1, tags={"class": "ReceiverHelmsman", "status": receiver_status}
+            )
+            self.latest_receiver_status = receiver_status
+        except Exception as e:
+            print(f"Got exception when getting Receiver service's status: {repr(e)}")
 
 
 graph = Router.bind(Pinger.bind(), Reaper.bind())
