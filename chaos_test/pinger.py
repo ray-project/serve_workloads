@@ -174,6 +174,7 @@ class Pinger:
                         )
             except Exception as e:
                 self._count_failed_request(-1, reason=repr(e))
+                self._increment_error_counter(-1)
                 self.fail_counter.inc()
                 print(
                     f"{time.strftime('%b %d – %l:%M%p: ')}"
