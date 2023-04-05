@@ -433,7 +433,7 @@ class ReceiverHelmsman:
         self.bearer_token = ""
         self.receiver_service_id = ""
         self.cookie = ""
-        self.update_interval = 0
+        self.update_interval_s = 0
         self.manage_loop_task = None
         self._initialize_metrics()
         self.latest_receiver_status = None
@@ -445,7 +445,7 @@ class ReceiverHelmsman:
             "bearer_token",
             "receiver_service_id",
             "cookie",
-            "update_interval",
+            "update_interval_s",
         ]
 
         for var in config_variables:
