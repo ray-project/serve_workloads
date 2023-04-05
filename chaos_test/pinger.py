@@ -132,31 +132,46 @@ class Pinger:
         while True:
             json_payload = {RECEIVER_KILL_KEY: KillOptions.SPARE}
 
-            try:
-                start_time = time.time()
+            start_time = time.time()
 
-                self.pending_requests.add(
-                    self.client.post(
-                        self.receiver_url,
-                        headers={"Authorization": f"Bearer {self.bearer_token}"},
-                        json=json_payload,
-                        timeout=10,
-                    )
+            self.pending_requests.add(
+                self.client.post(
+                    self.receiver_url,
+                    headers={"Authorization": f"Bearer {self.bearer_token}"},
+                    json=json_payload,
+                    timeout=10,
                 )
+            )
 
-                # Spend half the send interval waiting for pending requests.
-                # Spend the rest on processing the responses.
-                done, pending = await asyncio.wait(
-                    self.pending_requests, timeout=send_interval_s / 2
-                )
-                self.pending_requests = pending
-                self.num_pending_requests = len(self.pending_requests)
-                self.pending_requests_gauge.set(len(self.pending_requests))
+            # Spend half the send interval waiting for pending requests.
+            # Spend the rest on processing the responses.
+            done, pending = await asyncio.wait(
+                self.pending_requests, timeout=send_interval_s / 2
+            )
+            self.pending_requests = pending
+            self.num_pending_requests = len(self.pending_requests)
+            self.pending_requests_gauge.set(len(self.pending_requests))
 
-                for task in done:
+            for task in done:
+                try:
                     response = await task
-                    self.request_counter.inc()
                     status_code = response.status
+                except asyncio.TimeoutError as e:
+                    self.request_timeout_error_counter.inc()
+                    self._count_failed_request(-2, reason="TimeoutError")
+                    print(
+                        f"{time.strftime('%b %d – %l:%M%p: ')}"
+                        f"Got exception: \n{repr(e)}"
+                    )
+                except Exception as e:
+                    self._count_failed_request(-1, reason=repr(e))
+                    self._increment_error_counter(-1)
+                    self.fail_counter.inc()
+                    print(
+                        f"{time.strftime('%b %d – %l:%M%p: ')}"
+                        f"Got exception: \n{repr(e)}"
+                    )
+                else:
                     if status_code == 200:
                         self._count_successful_request()
                         self.success_counter.inc()
@@ -166,20 +181,12 @@ class Pinger:
                         )
                         self.fail_counter.inc()
                         self._increment_error_counter(status_code)
-                    if self.current_num_requests % 100 == 0:
-                        print(
-                            f"{time.strftime('%b %d – %l:%M%p: ')}"
-                            f"Sent {self.current_num_requests} "
-                            f'requests to "{self.receiver_url}".'
-                        )
-            except Exception as e:
-                self._count_failed_request(-1, reason=repr(e))
-                self._increment_error_counter(-1)
-                self.fail_counter.inc()
-                print(
-                    f"{time.strftime('%b %d – %l:%M%p: ')}"
-                    f"Got exception: \n{repr(e)}"
-                )
+                if self.current_num_requests % 100 == 0:
+                    print(
+                        f"{time.strftime('%b %d – %l:%M%p: ')}"
+                        f"Sent {self.current_num_requests} "
+                        f'requests to "{self.receiver_url}".'
+                    )
 
             send_interval_remaining_s = send_interval_s - (time.time() - start_time)
             if send_interval_remaining_s > 0:
@@ -276,9 +283,15 @@ class Pinger:
                 tag_keys=("class",),
             ).set_default_tags({"class": "Pinger"})
 
+        self.request_timeout_error_counter = Counter(
+            "pinger_num_request_timeout",
+            description="Number of requests that timed out after retries.",
+            tag_keys=("class",),
+        ).set_default_tags({"class": "Pinger"})
+
         self.http_error_fallback_counter = Counter(
             "pinger_fallback_http_error",
-            description="Number of other HTTP response errors received.",
+            description="Number of any other errors when processing responses.",
             tag_keys=("class",),
         ).set_default_tags({"class": "Pinger"})
 
@@ -313,6 +326,7 @@ class Pinger:
 
         # From https://stackoverflow.com/a/63925153
         async def on_request_start(session, trace_config_ctx, params):
+            self.request_counter.inc()
             trace_config_ctx.start = asyncio.get_event_loop().time()
 
         async def on_request_end(session, trace_config_ctx, params):
