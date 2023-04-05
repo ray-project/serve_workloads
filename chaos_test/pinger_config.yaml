@@ -3,7 +3,7 @@
 import_path: chaos_test.pinger:graph
 
 runtime_env:
-  working_dir: https://github.com/ray-project/serve_workloads/archive/4d33a075ff1a221e9033cd8ae4627a99efa2feca.zip
+  working_dir: https://github.com/ray-project/serve_workloads/archive/f91c6f5a25dcd856fef446de15a84c70c0a50be5.zip
   env_vars:
     RAY_SERVE_REQUEST_PROCESSING_TIMEOUT_S: '1'
 
@@ -12,6 +12,10 @@ host: 0.0.0.0
 port: 8000
 
 deployments:
+- name: Router
+  num_replicas: 1
+  ray_actor_options:
+    num_cpus: 0
 - name: Pinger
   num_replicas: 1
   user_config:
@@ -26,5 +30,16 @@ deployments:
     receiver_url: YOUR_RECEIVER_URL
     bearer_token: YOUR_RECEIVER_BEARER_TOKEN
     kill_interval_s: 300
+  ray_actor_options:
+    num_cpus: 0
+- name: ReceiverHelmsman
+  num_replicas: 1
+  user_config:
+    receiver_service_name: YOUR_RECEIVER_NAME
+    receiver_url: YOUR_RECEIVER_URL
+    bearer_token: YOUR_RECEIVER_BEARER_TOKEN
+    receiver_service_id: YOUR_RECEIVER_SERVICE_ID
+    cookie: YOUR_COOKIE
+    update_interval_s: YOUR_UPDATE_INTERVAL_S
   ray_actor_options:
     num_cpus: 0
