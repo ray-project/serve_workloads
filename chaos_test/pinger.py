@@ -500,8 +500,8 @@ class ReceiverHelmsman:
 
     def _initialize_metrics(self):
         self.receiver_status_gauge = Gauge(
-            "pinger_request_latency",
-            description="Latency of last successful request.",
+            "pinger_receiver_status",
+            description="Status of the Receiver service.",
             tag_keys=("class", "status"),
         ).set_default_tags({"class": "ReceiverHelmsman"})
 
