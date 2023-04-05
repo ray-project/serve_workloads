@@ -140,7 +140,7 @@ class Pinger:
                         self.receiver_url,
                         headers={"Authorization": f"Bearer {self.bearer_token}"},
                         json=json_payload,
-                        timeout=3,
+                        timeout=10,
                     )
                 )
 
