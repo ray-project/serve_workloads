@@ -14,14 +14,15 @@ from ray.util.metrics import Counter, Gauge
 from ray._private.utils import run_background_task
 
 
-# These options should get overwritten in the Serve config with a real
-# authentication token and URL.
-DEFAULT_BEARER_TOKEN = "default"
-DEFAULT_RECEIVER_URL = "http://localhost:8000/fail"
-DEFAULT_RECEIVER_SERVICE_ID = "default"
-DEFAULT_COOKIE = ""
-DEFAULT_KILL_INTERVAL_S = 300  # In seconds
-DEFAULT_MAX_QPS = 100
+CONFIG_DEFAULTS = {
+    "bearer_token": "default",
+    "receiver_url": "http://localhost:8000/",
+    "receiver_service_id": "default",
+    "cookie": "",
+    "kill_interval_s": 300,  # in seconds
+    "max_qps": 100,
+    "update_interval_s": 18000,  # in seconds
+}
 
 
 app = FastAPI()
@@ -30,9 +31,10 @@ app = FastAPI()
 @serve.deployment(num_replicas=1, ray_actor_options={"num_cpus": 0})
 @serve.ingress(app)
 class Router:
-    def __init__(self, pinger_handle, reaper_handle):
+    def __init__(self, pinger_handle, reaper_handle, helmsman_handle):
         self.pinger = pinger_handle
         self.reaper = reaper_handle
+        self.helmsman = helmsman_handle
 
     @app.get("/")
     def root(self) -> str:
@@ -40,25 +42,32 @@ class Router:
 
     @app.get("/start")
     async def start(self):
-        await self.stop_pinger()
-        await self.stop_reaper()
-        return "Started Pinger and Reaper!"
+        await self.start_pinger()
+        await self.start_reaper()
+        await self.start_helmsman()
+        return "Started deployment loops!"
 
     @app.get("/start-pinger")
-    async def stop_pinger(self) -> str:
+    async def start_pinger(self) -> str:
         await (await self.pinger.start.remote())
         return "Started Pinger!"
 
     @app.get("/start-reaper")
-    async def stop_reaper(self) -> str:
+    async def start_reaper(self) -> str:
         await (await self.reaper.start.remote())
         return "Started Reaper!"
+
+    @app.get("/start-helmsman")
+    async def start_helmsman(self) -> str:
+        await (await self.helmsman.start.remote())
+        return "Started Helmsman!"
 
     @app.get("/stop")
     async def stop(self):
         await self.stop_pinger()
         await self.stop_reaper()
-        return "Stopped Pinger and Reaper!"
+        await self.stop_helmsman()
+        return "Stopped deployment loops!"
 
     @app.get("/stop-pinger")
     async def stop_pinger(self) -> str:
@@ -70,20 +79,27 @@ class Router:
         await (await self.reaper.stop.remote())
         return "Stopped Reaper!"
 
+    @app.get("/stop-helmsman")
+    async def stop_helmsman(self) -> str:
+        await (await self.helmsman.stop.remote())
+        return "Stopped Helmsman!"
+
     @app.get("/info")
     async def get_info(self):
         pinger_info = (await (await self.pinger.get_info.remote())).copy()
         reaper_info = (await (await self.reaper.get_info.remote())).copy()
+        helmsman_info = (await (await self.helmsman.get_info.remote())).copy()
         pinger_info.update(reaper_info)
+        pinger_info.update(helmsman_info)
         return pinger_info
 
 
 @serve.deployment(
     num_replicas=1,
     user_config={
-        "receiver_url": DEFAULT_RECEIVER_URL,
-        "bearer_token": DEFAULT_BEARER_TOKEN,
-        "max_qps": DEFAULT_MAX_QPS,
+        "receiver_url": CONFIG_DEFAULTS["receiver_url"],
+        "bearer_token": CONFIG_DEFAULTS["bearer_token"],
+        "max_qps": CONFIG_DEFAULTS["max_qps"],
     },
     ray_actor_options={"num_cpus": 0},
 )
@@ -99,22 +115,12 @@ class Pinger:
         self.pending_requests = set()
 
     def reconfigure(self, config: Dict):
+        config_variables = ["receiver_url", "bearer_token", "max_qps"]
 
-        new_receiver_url = config.get("receiver_url", DEFAULT_RECEIVER_URL)
-        print(
-            f'Changing receiver URL from "{self.receiver_url}" to "{new_receiver_url}"'
-        )
-        self.receiver_url = new_receiver_url
-
-        new_bearer_token = config.get("bearer_token", DEFAULT_BEARER_TOKEN)
-        print(
-            f'Changing bearer token from "{self.bearer_token}" to "{new_bearer_token}"'
-        )
-        self.bearer_token = new_bearer_token
-
-        new_max_qps = config.get("max_qps", DEFAULT_MAX_QPS)
-        print(f'Changing max QPS from "{self.max_qps}" to "{new_max_qps}"')
-        self.max_qps = new_max_qps
+        for var in config_variables:
+            new_value = config.get(var, CONFIG_DEFAULTS[var])
+            print(f'Changing {var} from "{getattr(self, var)}" to "{new_value}"')
+            setattr(self, var, new_value)
 
         self.start()
 
@@ -328,9 +334,9 @@ class Pinger:
 @serve.deployment(
     num_replicas=1,
     user_config={
-        "receiver_url": DEFAULT_RECEIVER_URL,
-        "bearer_token": DEFAULT_BEARER_TOKEN,
-        "kill_interval_s": DEFAULT_KILL_INTERVAL_S,
+        "receiver_url": CONFIG_DEFAULTS["receiver_url"],
+        "bearer_token": CONFIG_DEFAULTS["bearer_token"],
+        "kill_interval_s": CONFIG_DEFAULTS["kill_interval_s"],
     },
     ray_actor_options={"num_cpus": 0},
 )
@@ -348,24 +354,12 @@ class Reaper:
         ).set_default_tags({"class": "Reaper"})
 
     def reconfigure(self, config: Dict):
+        config_variables = ["receiver_url", "bearer_token", "kill_interval_s"]
 
-        new_receiver_url = config.get("receiver_url", DEFAULT_RECEIVER_URL)
-        print(
-            f'Changing receiver URL from "{self.receiver_url}" to "{new_receiver_url}"'
-        )
-        self.receiver_url = new_receiver_url
-
-        new_bearer_token = config.get("bearer_token", DEFAULT_BEARER_TOKEN)
-        print(
-            f'Changing bearer token from "{self.bearer_token}" to "{new_bearer_token}"'
-        )
-        self.bearer_token = new_bearer_token
-
-        new_kill_interval = config.get("kill_interval_s", DEFAULT_KILL_INTERVAL_S)
-        print(
-            f"Changing kill interval from {self.kill_interval_s} to {new_kill_interval} seconds."
-        )
-        self.kill_interval_s = new_kill_interval
+        for var in config_variables:
+            new_value = config.get(var, CONFIG_DEFAULTS[var])
+            print(f'Changing {var} from "{getattr(self, var)}" to "{new_value}"')
+            setattr(self, var, new_value)
 
         self.start()
 
@@ -422,8 +416,9 @@ class Reaper:
 @serve.deployment(
     num_replicas=1,
     user_config={
-        "receiver_service_id": DEFAULT_RECEIVER_SERVICE_ID,
-        "cookie": DEFAULT_COOKIE,
+        "receiver_service_id": CONFIG_DEFAULTS["receiver_service_id"],
+        "cookie": CONFIG_DEFAULTS["cookie"],
+        "update_interval_s": CONFIG_DEFAULTS["update_interval_s"],
     },
     ray_actor_options={"num_cpus": 0},
 )
@@ -431,22 +426,18 @@ class ReceiverHelmsman:
     def __init__(self):
         self.receiver_service_id = ""
         self.cookie = ""
+        self.update_interval = 0
         self.manage_loop_task = None
         self._initialize_metrics()
         self.latest_receiver_status = None
 
     def reconfigure(self, config: Dict):
-        new_receiver_service_id = config.get(
-            "receiver_service_id", DEFAULT_RECEIVER_SERVICE_ID
-        )
-        print(
-            f'Changing receiver service ID from "{self.receiver_service_id}" to "{new_receiver_service_id}"'
-        )
-        self.receiver_service_id = new_receiver_service_id
+        config_variables = ["receiver_service_id", "cookie", "update_interval"]
 
-        new_cookie = config.get("cookie", DEFAULT_COOKIE)
-        print(f'Changing cookie from "{self.cookie}" to "{new_cookie}"')
-        self.cookie = new_cookie
+        for var in config_variables:
+            new_value = config.get(var, CONFIG_DEFAULTS[var])
+            print(f'Changing {var} from "{getattr(self, var)}" to "{new_value}"')
+            setattr(self, var, new_value)
 
         self.start()
 
@@ -474,6 +465,9 @@ class ReceiverHelmsman:
                 "Called stop() while ReceiverHelmsman was already stopped. Nothing changed."
             )
         self.current_kill_requests = 0
+
+    def get_info(self):
+        return {"Receiver status": self.latest_receiver_status}
 
     def _initialize_metrics(self):
         self.receiver_status_gauge = Gauge(
@@ -506,4 +500,4 @@ class ReceiverHelmsman:
             print(f"Got exception when getting Receiver service's status: {repr(e)}")
 
 
-graph = Router.bind(Pinger.bind(), Reaper.bind())
+graph = Router.bind(Pinger.bind(), Reaper.bind(), ReceiverHelmsman.bind())
