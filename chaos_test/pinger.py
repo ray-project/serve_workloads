@@ -159,6 +159,7 @@ class Pinger:
                 except asyncio.TimeoutError as e:
                     self.request_timeout_error_counter.inc()
                     self._count_failed_request(-2, reason="TimeoutError")
+                    self.fail_counter.inc()
                     print(
                         f"{time.strftime('%b %d – %l:%M%p: ')}"
                         f"Got exception: \n{repr(e)}"
