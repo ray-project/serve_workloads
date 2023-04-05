@@ -15,9 +15,10 @@ from ray._private.utils import run_background_task
 
 
 CONFIG_DEFAULTS = {
-    "bearer_token": "default",
     "receiver_url": "http://localhost:8000/",
+    "receiver_service_name": "default",
     "receiver_service_id": "default",
+    "bearer_token": "default",
     "cookie": "",
     "kill_interval_s": 300,  # in seconds
     "max_qps": 100,
@@ -416,6 +417,9 @@ class Reaper:
 @serve.deployment(
     num_replicas=1,
     user_config={
+        "receiver_service_name": CONFIG_DEFAULTS["receiver_service_name"],
+        "receiver_url": CONFIG_DEFAULTS["receiver_url"],
+        "bearer_toker": CONFIG_DEFAULTS["bearer_token"],
         "receiver_service_id": CONFIG_DEFAULTS["receiver_service_id"],
         "cookie": CONFIG_DEFAULTS["cookie"],
         "update_interval_s": CONFIG_DEFAULTS["update_interval_s"],
@@ -424,6 +428,9 @@ class Reaper:
 )
 class ReceiverHelmsman:
     def __init__(self):
+        self.receiver_service_name = ""
+        self.receiver_url = ""
+        self.bearer_token = ""
         self.receiver_service_id = ""
         self.cookie = ""
         self.update_interval = 0
@@ -432,7 +439,14 @@ class ReceiverHelmsman:
         self.latest_receiver_status = None
 
     def reconfigure(self, config: Dict):
-        config_variables = ["receiver_service_id", "cookie", "update_interval"]
+        config_variables = [
+            "receiver_service_name",
+            "receiver_url",
+            "bearer_token",
+            "receiver_service_id",
+            "cookie",
+            "update_interval",
+        ]
 
         for var in config_variables:
             new_value = config.get(var, CONFIG_DEFAULTS[var])
