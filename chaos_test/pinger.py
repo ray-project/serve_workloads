@@ -338,6 +338,11 @@ class Reaper:
         self.kill_interval_s = float("inf")
         self.kill_loop_task = None
         self._initialize_stats()
+        self.kill_counter = Counter(
+            "pinger_num_kill_requests_sent",
+            description="Number of kill requests sent.",
+            tag_keys=("class",),
+        ).set_default_tags({"class": "Reaper"})
 
     def reconfigure(self, config: Dict):
 
@@ -381,6 +386,7 @@ class Reaper:
                 print(
                     "Got following exception when sending kill " f"request: {repr(e)}"
                 )
+            self.kill_counter.inc()
 
     def start(self):
         if self.kill_loop_task is not None:
