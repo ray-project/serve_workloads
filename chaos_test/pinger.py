@@ -1,29 +1,24 @@
 import time
+import json
+import yaml
 import asyncio
 import requests
 import itertools
 from typing import Dict
+from pathlib import Path
 from fastapi import FastAPI
 from aiohttp import TraceConfig
 from aiohttp_retry import RetryClient, ExponentialRetry
 
-from chaos_test.constants import RECEIVER_KILL_KEY, KillOptions
+from chaos_test.constants import (
+    RECEIVER_CONFIG_FILENAME,
+    RECEIVER_KILL_KEY,
+    KillOptions,
+)
 
 from ray import serve
 from ray.util.metrics import Counter, Gauge
 from ray._private.utils import run_background_task
-
-
-CONFIG_DEFAULTS = {
-    "receiver_url": "http://localhost:8000/",
-    "receiver_service_name": "default",
-    "receiver_service_id": "default",
-    "bearer_token": "default",
-    "cookie": "",
-    "kill_interval_s": 300,  # in seconds
-    "max_qps": 100,
-    "update_interval_s": 18000,  # in seconds
-}
 
 
 app = FastAPI()
@@ -95,20 +90,21 @@ class Router:
         return pinger_info
 
 
+PINGER_OPTIONS = [
+    "receiver_url",
+    "receiver_bearer_token",
+    "max_qps",
+]
+
+
 @serve.deployment(
     num_replicas=1,
-    user_config={
-        "receiver_url": CONFIG_DEFAULTS["receiver_url"],
-        "bearer_token": CONFIG_DEFAULTS["bearer_token"],
-        "max_qps": CONFIG_DEFAULTS["max_qps"],
-    },
+    user_config={option: None for option in PINGER_OPTIONS},
     ray_actor_options={"num_cpus": 0},
 )
 class Pinger:
     def __init__(self):
-        self.receiver_url = ""
-        self.bearer_token = ""
-        self.max_qps = 0
+        self.config_options = PINGER_OPTIONS
         self.request_loop_task = None
         self._initialize_stats()
         self._initialize_metrics()
@@ -116,13 +112,15 @@ class Pinger:
         self.pending_requests = set()
 
     def reconfigure(self, config: Dict):
-        config_variables = ["receiver_url", "bearer_token", "max_qps"]
-
-        for var in config_variables:
-            new_value = config.get(var, CONFIG_DEFAULTS[var])
-            print(f'Changing {var} from "{getattr(self, var)}" to "{new_value}"')
-            setattr(self, var, new_value)
-
+        for option in self.config_options:
+            new_value = config.get(option)
+            if hasattr(self, option):
+                print(
+                    f'Changing {option} from "{getattr(self, option)}" to "{new_value}"'
+                )
+            else:
+                print(f'Initializing {option} to "{new_value}"')
+            setattr(self, option, new_value)
         self.start()
 
     async def run_request_loop(self):
@@ -132,12 +130,12 @@ class Pinger:
         while True:
             json_payload = {RECEIVER_KILL_KEY: KillOptions.SPARE}
 
-            start_time = time.time()
+            start_time = asyncio.get_event_loop().time()
 
             self.pending_requests.add(
                 self.client.post(
                     self.receiver_url,
-                    headers={"Authorization": f"Bearer {self.bearer_token}"},
+                    headers={"Authorization": f"Bearer {self.receiver_bearer_token}"},
                     json=json_payload,
                     timeout=10,
                 )
@@ -189,7 +187,9 @@ class Pinger:
                         f'requests to "{self.receiver_url}".'
                     )
 
-            send_interval_remaining_s = send_interval_s - (time.time() - start_time)
+            send_interval_remaining_s = send_interval_s - (
+                asyncio.get_event_loop().time() - start_time
+            )
             if send_interval_remaining_s > 0:
                 await asyncio.sleep(send_interval_remaining_s)
 
@@ -339,7 +339,12 @@ class Pinger:
         trace_config.on_request_end.append(on_request_end)
 
         return RetryClient(
-            retry_options=ExponentialRetry(attempts=5, start_timeout=0.1, factor=2),
+            retry_options=ExponentialRetry(
+                attempts=5,
+                start_timeout=0.1,
+                factor=2,
+                exceptions=[asyncio.TimeoutError],
+            ),
             trace_configs=[trace_config],
         )
 
@@ -348,20 +353,21 @@ class Pinger:
         self.pending_requests.clear()
 
 
+REAPER_OPTIONS = [
+    "receiver_url",
+    "receiver_bearer_token",
+    "kill_interval_s",
+]
+
+
 @serve.deployment(
     num_replicas=1,
-    user_config={
-        "receiver_url": CONFIG_DEFAULTS["receiver_url"],
-        "bearer_token": CONFIG_DEFAULTS["bearer_token"],
-        "kill_interval_s": CONFIG_DEFAULTS["kill_interval_s"],
-    },
+    user_config={option: None for option in REAPER_OPTIONS},
     ray_actor_options={"num_cpus": 0},
 )
 class Reaper:
     def __init__(self):
-        self.receiver_url = ""
-        self.bearer_token = ""
-        self.kill_interval_s = float("inf")
+        self.config_options = REAPER_OPTIONS
         self.kill_loop_task = None
         self._initialize_stats()
         self.kill_counter = Counter(
@@ -371,13 +377,15 @@ class Reaper:
         ).set_default_tags({"class": "Reaper"})
 
     def reconfigure(self, config: Dict):
-        config_variables = ["receiver_url", "bearer_token", "kill_interval_s"]
-
-        for var in config_variables:
-            new_value = config.get(var, CONFIG_DEFAULTS[var])
-            print(f'Changing {var} from "{getattr(self, var)}" to "{new_value}"')
-            setattr(self, var, new_value)
-
+        for option in self.config_options:
+            new_value = config.get(option)
+            if hasattr(self, option):
+                print(
+                    f'Changing {option} from "{getattr(self, option)}" to "{new_value}"'
+                )
+            else:
+                print(f'Initializing {option} to "{new_value}"')
+            setattr(self, option, new_value)
         self.start()
 
     async def kill_loop(self):
@@ -392,7 +400,7 @@ class Reaper:
                 print("Sending kill request.")
                 requests.post(
                     self.receiver_url,
-                    headers={"Authorization": f"Bearer {self.bearer_token}"},
+                    headers={"Authorization": f"Bearer {self.receiver_bearer_token}"},
                     json=json_payload,
                     timeout=3,
                 )
@@ -430,45 +438,50 @@ class Reaper:
         self.current_kill_requests = 0
 
 
+RECEIVER_HELMSMAN_OPTIONS = [
+    "project_id",
+    "receiver_service_name",
+    "receiver_service_id",
+    "receiver_build_id",
+    "receiver_compute_config_id",
+    "receiver_gcs_external_storage_config",
+    "cookie",
+    "update_interval_s",
+]
+
+
 @serve.deployment(
     num_replicas=1,
-    user_config={
-        "receiver_service_name": CONFIG_DEFAULTS["receiver_service_name"],
-        "receiver_url": CONFIG_DEFAULTS["receiver_url"],
-        "bearer_toker": CONFIG_DEFAULTS["bearer_token"],
-        "receiver_service_id": CONFIG_DEFAULTS["receiver_service_id"],
-        "cookie": CONFIG_DEFAULTS["cookie"],
-        "update_interval_s": CONFIG_DEFAULTS["update_interval_s"],
-    },
+    user_config={option: None for option in RECEIVER_HELMSMAN_OPTIONS},
     ray_actor_options={"num_cpus": 0},
 )
 class ReceiverHelmsman:
     def __init__(self):
-        self.receiver_service_name = ""
-        self.receiver_url = ""
-        self.bearer_token = ""
-        self.receiver_service_id = ""
-        self.cookie = ""
-        self.update_interval_s = 0
+        self.config_options = RECEIVER_HELMSMAN_OPTIONS
         self.manage_loop_task = None
         self._initialize_metrics()
+        self.receiver_config_template = self._parse_receiver_config_template()
+        self.receiver_import_paths = itertools.cycle(
+            ["chaos_test.receiver:beta", "chaos_test.receiver:alpha"]
+        )
+        self.next_receiver_import_path = next(self.receiver_import_paths)
         self.latest_receiver_status = None
 
+        self.status_get_url = f"https://console.anyscale-staging.com/api/v2/services-v2/{self.receiver_service_id}"
+        self.update_put_url = (
+            "https://console.anyscale-staging.com/api/v2/services-v2/apply"
+        )
+
     def reconfigure(self, config: Dict):
-        config_variables = [
-            "receiver_service_name",
-            "receiver_url",
-            "bearer_token",
-            "receiver_service_id",
-            "cookie",
-            "update_interval_s",
-        ]
-
-        for var in config_variables:
-            new_value = config.get(var, CONFIG_DEFAULTS[var])
-            print(f'Changing {var} from "{getattr(self, var)}" to "{new_value}"')
-            setattr(self, var, new_value)
-
+        for option in self.config_options:
+            new_value = config.get(option)
+            if hasattr(self, option):
+                print(
+                    f'Changing {option} from "{getattr(self, option)}" to "{new_value}"'
+                )
+            else:
+                print(f'Initializing {option} to "{new_value}"')
+            setattr(self, option, new_value)
         self.start()
 
     async def run_manage_loop(self):
@@ -507,9 +520,10 @@ class ReceiverHelmsman:
         ).set_default_tags({"class": "ReceiverHelmsman"})
 
     def _log_receiver_status(self):
-        get_url = f"https://console.anyscale-staging.com/api/v2/services-v2/{self.receiver_service_id}"
         try:
-            response = requests.get(get_url, headers={"Cookie": self.cookie})
+            response = requests.get(
+                self.status_get_url, headers={"Cookie": self.cookie}
+            )
             receiver_status = response.json()["result"]["current_state"]
             if (
                 self.latest_receiver_status is not None
@@ -528,6 +542,37 @@ class ReceiverHelmsman:
             self.latest_receiver_status = receiver_status
         except Exception as e:
             print(f"Got exception when getting Receiver service's status: {repr(e)}")
+
+    def _parse_receiver_config_template(self) -> Dict:
+        cur_dir = Path(__file__).parent
+        with open(f"{cur_dir}/{RECEIVER_CONFIG_FILENAME}") as f:
+            receiver_config_template = yaml.safe_load(f)
+
+        return receiver_config_template
+
+    def _in_place_update_receiver(self):
+        try:
+            self.receiver_config_template[
+                "import_path"
+            ] = self.next_receiver_import_path
+            self.next_receiver_import_path = next(self.receiver_import_paths)
+            request_data = {
+                "name": self.receiver_service_name,
+                "description": "Receives the pinger's pings.",
+                "project_id": self.project_id,
+                "ray_serve_config": self.receiver_config_template,
+                "build_id": self.receiver_build_id,
+                "compute_config_id": self.receiver_compute_config_id,
+                "ray_gcs_external_storage_config": self.receiver_gcs_external_storage_config,
+                "rollout_strategy": "IN_PLACE",
+            }
+            response = requests.put(
+                self.update_put_url,
+                data=json.dumps(request_data),
+                headers={"Cookie": self.cookie},
+            )
+        except Exception as e:
+            print(f"Got exception when in-place upgrading Receiver: {repr(e)}")
 
 
 graph = Router.bind(Pinger.bind(), Reaper.bind(), ReceiverHelmsman.bind())
