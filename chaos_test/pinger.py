@@ -515,7 +515,10 @@ class ReceiverHelmsman:
             print("Stopped ReceiverHelmsman. Call start() to start.")
 
     def get_info(self):
-        return {"Receiver status": self.latest_receiver_status}
+        return {
+            "Receiver status": self.latest_receiver_status,
+            "Latest upgrade type": self.latest_receiver_upgrade_type,
+        }
 
     def _initialize_metrics(self):
         self.receiver_status_gauge = StringGauge(
