@@ -91,16 +91,16 @@ class Router:
         return pinger_info
 
 
-PINGER_OPTIONS = [
-    "receiver_url",
-    "receiver_bearer_token",
-    "max_qps",
-]
+PINGER_OPTIONS = {
+    "receiver_url": str,
+    "receiver_bearer_token": str,
+    "max_qps": int,
+}
 
 
 @serve.deployment(
     num_replicas=1,
-    user_config={option: None for option in PINGER_OPTIONS},
+    user_config={option: None for option in PINGER_OPTIONS.keys()},
     ray_actor_options={"num_cpus": 0},
 )
 class Pinger:
@@ -113,8 +113,8 @@ class Pinger:
         self.pending_requests = set()
 
     def reconfigure(self, config: Dict):
-        for option in self.config_options:
-            new_value = config.get(option)
+        for option, type_cast in self.config_options.items():
+            new_value = type_cast(config.get(option))
             if hasattr(self, option) and getattr(self, option) != new_value:
                 print(
                     f'Changing {option} from "{getattr(self, option)}" to "{new_value}"'
@@ -353,16 +353,16 @@ class Pinger:
         self.pending_requests.clear()
 
 
-REAPER_OPTIONS = [
-    "receiver_url",
-    "receiver_bearer_token",
-    "kill_interval_s",
-]
+REAPER_OPTIONS = {
+    "receiver_url": str,
+    "receiver_bearer_token": str,
+    "kill_interval_s": float,
+}
 
 
 @serve.deployment(
     num_replicas=1,
-    user_config={option: None for option in REAPER_OPTIONS},
+    user_config={option: None for option in REAPER_OPTIONS.keys()},
     ray_actor_options={"num_cpus": 0},
 )
 class Reaper:
@@ -377,8 +377,8 @@ class Reaper:
         ).set_default_tags({"class": "Reaper"})
 
     def reconfigure(self, config: Dict):
-        for option in self.config_options:
-            new_value = config.get(option)
+        for option, type_cast in self.config_options.items():
+            new_value = type_cast(config.get(option))
             if hasattr(self, option) and getattr(self, option) != new_value:
                 print(
                     f'Changing {option} from "{getattr(self, option)}" to "{new_value}"'
@@ -438,16 +438,16 @@ class Reaper:
         self.current_kill_requests = 0
 
 
-RECEIVER_HELMSMAN_OPTIONS = [
-    "project_id",
-    "receiver_service_name",
-    "receiver_service_id",
-    "receiver_build_id",
-    "receiver_compute_config_id",
-    "receiver_gcs_external_storage_config",
-    "cookie",
-    "update_interval_s",
-]
+RECEIVER_HELMSMAN_OPTIONS = {
+    "project_id": str,
+    "receiver_service_name": str,
+    "receiver_service_id": str,
+    "receiver_build_id": str,
+    "receiver_compute_config_id": str,
+    "receiver_gcs_external_storage_config": str,
+    "cookie": str,
+    "update_interval_s": float,
+}
 
 
 @serve.deployment(
@@ -471,8 +471,8 @@ class ReceiverHelmsman:
         self.latest_receiver_upgrade_type = None
 
     def reconfigure(self, config: Dict):
-        for option in self.config_options:
-            new_value = config.get(option)
+        for option, type_cast in self.config_options.items():
+            new_value = type_cast(config.get(option))
             if hasattr(self, option) and getattr(self, option) != new_value:
                 print(
                     f'Changing {option} from "{getattr(self, option)}" to "{new_value}"'

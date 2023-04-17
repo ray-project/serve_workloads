@@ -51,7 +51,7 @@ class StringGauge(Gauge):
             )
         if (
             self.current_value is not None
-            and self.tags[self.label_name] != self.current_value
+            and tags[self.label_name] != self.current_value
         ):
             old_tags = tags.copy()
             old_tags[self.label_name] = self.current_value
