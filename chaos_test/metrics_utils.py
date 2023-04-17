@@ -55,7 +55,7 @@ class StringGauge(Gauge):
         ):
             old_tags = tags.copy()
             old_tags[self.label_name] = self.current_value
-            super(Gauge, self).set(0, old_tags)
+            super().set(0, old_tags)
 
-        super(Gauge, self).set(1, tags)
+        super().set(1, tags)
         self.current_value = tags[self.label_name]

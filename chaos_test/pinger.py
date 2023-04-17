@@ -115,7 +115,7 @@ class Pinger:
     def reconfigure(self, config: Dict):
         for option in self.config_options:
             new_value = config.get(option)
-            if hasattr(self, option):
+            if hasattr(self, option) and getattr(self, option) != new_value:
                 print(
                     f'Changing {option} from "{getattr(self, option)}" to "{new_value}"'
                 )
@@ -379,7 +379,7 @@ class Reaper:
     def reconfigure(self, config: Dict):
         for option in self.config_options:
             new_value = config.get(option)
-            if hasattr(self, option):
+            if hasattr(self, option) and getattr(self, option) != new_value:
                 print(
                     f'Changing {option} from "{getattr(self, option)}" to "{new_value}"'
                 )
@@ -460,18 +460,20 @@ class ReceiverHelmsman:
         self.config_options = RECEIVER_HELMSMAN_OPTIONS
         self.tasks = []
         self._initialize_metrics()
+        self._initialize_stats()
         self.receiver_config_template = self._parse_receiver_config_template()
         self.receiver_import_paths = itertools.cycle(
             ["chaos_test.receiver:beta", "chaos_test.receiver:alpha"]
         )
         self.next_receiver_import_path = next(self.receiver_import_paths)
+        self.latest_receiver_import_path = None
         self.latest_receiver_status = None
         self.latest_receiver_upgrade_type = None
 
     def reconfigure(self, config: Dict):
         for option in self.config_options:
             new_value = config.get(option)
-            if hasattr(self, option):
+            if hasattr(self, option) and getattr(self, option) != new_value:
                 print(
                     f'Changing {option} from "{getattr(self, option)}" to "{new_value}"'
                 )
@@ -518,6 +520,9 @@ class ReceiverHelmsman:
         return {
             "Receiver status": self.latest_receiver_status,
             "Latest upgrade type": self.latest_receiver_upgrade_type,
+            "Latest Receiver import path": self.latest_receiver_import_path,
+            "Current number of in-place upgrade requests": self.current_in_place_upgrade_requests,
+            "Total number of in-place upgrade requests": self.total_in_place_upgrade_requests,
         }
 
     def _initialize_metrics(self):
@@ -528,12 +533,23 @@ class ReceiverHelmsman:
             tag_keys=("class", "status"),
         ).set_default_tags({"class": "ReceiverHelmsman"})
 
+        self.receiver_import_path_gauge = StringGauge(
+            label_name="import_path",
+            name="pinger_latest_receiver_import_path",
+            description="Import path of latest config sent to Receiver service.",
+            tag_keys=("class", "import_path"),
+        ).set_default_tags({"class": "ReceiverHelmsman"})
+
         self.receiver_upgrade_gauge = StringGauge(
             label_name="upgrade_type",
             name="pinger_latest_receiver_upgrade_type",
             description="Latest type of upgrade issued to Receiver service.",
             tag_keys=("class", "upgrade_type"),
         ).set_default_tags({"class": "ReceiverHelmsman"})
+
+    def _initialize_stats(self):
+        self.total_in_place_upgrade_requests = 0
+        self.current_in_place_upgrade_requests = 0
 
     def _update_rest_api_urls(self):
         self.status_get_url = f"https://console.anyscale-staging.com/api/v2/services-v2/{self.receiver_service_id}"
@@ -577,16 +593,38 @@ class ReceiverHelmsman:
                 "ray_gcs_external_storage_config": self.receiver_gcs_external_storage_config,
                 "rollout_strategy": "IN_PLACE",
             }
+            print(
+                f"In-place upgrading Receiver to import path "
+                f""""{self.receiver_config_template['import_path']}"."""
+            )
             response = requests.put(
                 self.update_put_url,
                 data=json.dumps(request_data),
                 headers={"Cookie": self.cookie},
             )
-            self.receiver_upgrade_gauge.set(
-                {"class": "ReceiverHelmsman", "upgrade_type": "IN_PLACE"}
-            )
             self.latest_receiver_upgrade_type = "IN_PLACE"
+            self.receiver_upgrade_gauge.set(
+                {
+                    "class": "ReceiverHelmsman",
+                    "upgrade_type": self.latest_receiver_upgrade_type,
+                }
+            )
+            self.latest_receiver_import_path = self.receiver_config_template[
+                "import_path"
+            ]
+            self.receiver_import_path_gauge.set(
+                {
+                    "class": "ReceiverHelmsman",
+                    "import_path": self.latest_receiver_import_path,
+                }
+            )
+            self.total_in_place_upgrade_requests += 1
+            self.current_in_place_upgrade_requests += 1
             response.raise_for_status()
+            print(
+                f"Finished in-place upgrading Receiver to import path "
+                f""""{self.receiver_config_template['import_path']}"."""
+            )
         except Exception as e:
             print(f"Got exception when in-place upgrading Receiver: {repr(e)}")
 
