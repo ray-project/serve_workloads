@@ -15,6 +15,7 @@ from chaos_test.constants import (
     RECEIVER_KILL_KEY,
     KillOptions,
 )
+from chaos_test.metrics_utils import StringGauge
 
 from ray import serve
 from ray.util.metrics import Counter, Gauge
@@ -241,7 +242,6 @@ class Pinger:
         self.current_num_requests = 0
         self.current_successful_requests = 0
         self.current_failed_requests = 0
-        self.current_kill_requests = 0
         self.num_pending_requests = 0
 
     def _initialize_metrics(self):
@@ -458,7 +458,7 @@ RECEIVER_HELMSMAN_OPTIONS = [
 class ReceiverHelmsman:
     def __init__(self):
         self.config_options = RECEIVER_HELMSMAN_OPTIONS
-        self.manage_loop_task = None
+        self.tasks = []
         self._initialize_metrics()
         self.receiver_config_template = self._parse_receiver_config_template()
         self.receiver_import_paths = itertools.cycle(
@@ -466,11 +466,7 @@ class ReceiverHelmsman:
         )
         self.next_receiver_import_path = next(self.receiver_import_paths)
         self.latest_receiver_status = None
-
-        self.status_get_url = f"https://console.anyscale-staging.com/api/v2/services-v2/{self.receiver_service_id}"
-        self.update_put_url = (
-            "https://console.anyscale-staging.com/api/v2/services-v2/apply"
-        )
+        self.latest_receiver_upgrade_type = None
 
     def reconfigure(self, config: Dict):
         for option in self.config_options:
@@ -482,42 +478,65 @@ class ReceiverHelmsman:
             else:
                 print(f'Initializing {option} to "{new_value}"')
             setattr(self, option, new_value)
+        self._update_rest_api_urls()
         self.start()
 
-    async def run_manage_loop(self):
+    async def run_status_check_loop(self):
         while True:
             self._log_receiver_status()
             await asyncio.sleep(5)
 
+    async def run_upgrade_loop(self):
+        while True:
+            await asyncio.sleep(self.upgrade_interval_s)
+            self._in_place_update_receiver()
+
     def start(self):
-        if self.manage_loop_task is not None:
+        task_methods = [self.run_status_check_loop, self.run_upgrade_loop]
+        if len(self.tasks) > 0:
             print(
                 "Called start() while ReceiverHelmsman is already running. Nothing changed."
             )
         else:
-            self.manage_loop_task = run_background_task(self.run_manage_loop())
+            for method in task_methods:
+                self.tasks.append(run_background_task(method()))
             print("Started ReceiverHelmsman. Call stop() to stop.")
 
     def stop(self):
-        if self.manage_loop_task is not None:
-            self.manage_loop_task.cancel()
-            self.manage_loop_task = None
-            print("Stopped ReceiverHelmsman. Call start() to start.")
-        else:
+        if len(self.tasks) == 0:
             print(
                 "Called stop() while ReceiverHelmsman was already stopped. Nothing changed."
             )
-        self.current_kill_requests = 0
+        else:
+            for task in self.tasks:
+                task.cancel()
+
+            self.tasks.clear()
+            print("Stopped ReceiverHelmsman. Call start() to start.")
 
     def get_info(self):
         return {"Receiver status": self.latest_receiver_status}
 
     def _initialize_metrics(self):
-        self.receiver_status_gauge = Gauge(
-            "pinger_receiver_status",
+        self.receiver_status_gauge = StringGauge(
+            label_name="status",
+            name="pinger_receiver_status",
             description="Status of the Receiver service.",
             tag_keys=("class", "status"),
         ).set_default_tags({"class": "ReceiverHelmsman"})
+
+        self.receiver_upgrade_gauge = StringGauge(
+            label_name="upgrade_type",
+            name="pinger_latest_receiver_upgrade_type",
+            description="Latest type of upgrade issued to Receiver service.",
+            tag_keys=("class", "upgrade_type"),
+        ).set_default_tags({"class": "ReceiverHelmsman"})
+
+    def _update_rest_api_urls(self):
+        self.status_get_url = f"https://console.anyscale-staging.com/api/v2/services-v2/{self.receiver_service_id}"
+        self.update_put_url = (
+            "https://console.anyscale-staging.com/api/v2/services-v2/apply"
+        )
 
     def _log_receiver_status(self):
         try:
@@ -525,19 +544,8 @@ class ReceiverHelmsman:
                 self.status_get_url, headers={"Cookie": self.cookie}
             )
             receiver_status = response.json()["result"]["current_state"]
-            if (
-                self.latest_receiver_status is not None
-                and self.latest_receiver_status != receiver_status
-            ):
-                self.receiver_status_gauge.set(
-                    0,
-                    tags={
-                        "class": "ReceiverHelmsman",
-                        "status": self.latest_receiver_status,
-                    },
-                )
             self.receiver_status_gauge.set(
-                1, tags={"class": "ReceiverHelmsman", "status": receiver_status}
+                tags={"class": "ReceiverHelmsman", "status": receiver_status}
             )
             self.latest_receiver_status = receiver_status
         except Exception as e:
@@ -571,6 +579,11 @@ class ReceiverHelmsman:
                 data=json.dumps(request_data),
                 headers={"Cookie": self.cookie},
             )
+            self.receiver_upgrade_gauge.set(
+                {"class": "ReceiverHelmsman", "upgrade_type": "IN_PLACE"}
+            )
+            self.latest_receiver_upgrade_type = "IN_PLACE"
+            response.raise_for_status()
         except Exception as e:
             print(f"Got exception when in-place upgrading Receiver: {repr(e)}")
 

@@ -25,3 +25,6 @@ class ServiceStatus(str, Enum):
     UPDATING = "Updating"
     ROLLING_OUT = "Rolling out"
     ROLLINGBACK = "Rolling back"
+
+
+RECEIVER_CONFIG_FILENAME = "receiver_config.yaml"
