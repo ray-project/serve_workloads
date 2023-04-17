@@ -1,7 +1,7 @@
-import_path: chaos_test.receiver:graph
+import_path: chaos_test.receiver:alpha
 
 runtime_env:
-  working_dir: https://github.com/ray-project/serve_workloads/archive/2e2bb93b1d399c84f7a3142991c59a9ca6034f96.zip
+  working_dir: https://github.com/ray-project/serve_workloads/archive/2907b755b7bb69253a7ff93d32a80fb829ac0dea.zip
   env_vars:
     RAY_SERVE_REQUEST_PROCESSING_TIMEOUT_S: '1'
 
