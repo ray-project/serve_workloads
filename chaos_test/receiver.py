@@ -23,7 +23,8 @@ from ray.experimental.state.api import list_actors
     },
 )
 class Receiver:
-    def __init__(self, node_killer_handle):
+    def __init__(self, name, node_killer_handle):
+        self.name = name
         self.node_killer_handle = node_killer_handle
         print(
             f"Receiver actor starting on node {ray.get_runtime_context().get_node_id()}"
@@ -42,7 +43,7 @@ class Receiver:
                 ],
                 timeout=10,
             )
-        return f"(PID: {os.getpid()}) Received request!"
+        return f"(PID: {os.getpid()}) {self.name} Receiver running!"
 
 
 @serve.deployment(num_replicas=1, ray_actor_options={"num_cpus": 0})
@@ -58,4 +59,5 @@ class NodeKiller:
         return ""
 
 
-graph = Receiver.bind(NodeKiller.bind())
+alpha = Receiver.bind("Alpha", NodeKiller.bind())
+beta = Receiver.bind("Beta", NodeKiller.bind())
