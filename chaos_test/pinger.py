@@ -465,7 +465,11 @@ class ReceiverHelmsman:
         self.receiver_import_paths = itertools.cycle(
             ["chaos_test.receiver:beta", "chaos_test.receiver:alpha"]
         )
+        self.receiver_singleton_resource = itertools.cycle(
+            ["beta_singleton", "alpha_singleton"]
+        )
         self.next_receiver_import_path = next(self.receiver_import_paths)
+        self.next_singleton_resource = next(self.receiver_singleton_resource)
         self.latest_receiver_import_path = None
         self.latest_receiver_status = None
         self.latest_receiver_upgrade_type = None
@@ -585,7 +589,11 @@ class ReceiverHelmsman:
             self.receiver_config_template[
                 "import_path"
             ] = self.next_receiver_import_path
+            self.receiver_config_template["deployments"][1]["ray_actor_options"][
+                "resources"
+            ] = {self.next_singleton_resource: 1}
             self.next_receiver_import_path = next(self.receiver_import_paths)
+            self.next_singleton_resource = next(self.receiver_singleton_resource)
             request_data = {
                 "name": self.receiver_service_name,
                 "description": "Receives the pinger's pings.",
