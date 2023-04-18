@@ -490,6 +490,9 @@ class ReceiverHelmsman:
 
     async def run_upgrade_loop(self):
         while True:
+            print(
+                f"Waiting {self.upgrade_interval_s} seconds before upgrading Receiver."
+            )
             await asyncio.sleep(self.upgrade_interval_s)
             self._in_place_update_receiver()
 
