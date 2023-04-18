@@ -42,6 +42,6 @@ deployments:
     receiver_compute_config_id: YOUR_RECEIVER_COMPUTE_CONFIG_ID
     receiver_gcs_external_storage_config: YOUR_RECEIVER_GCS_EXTERNAL_STORAGE_CONFIG
     cookie: YOUR_COOKIE
-    update_interval_s: YOUR_UPDATE_INTERVAL_S
+    upgrade_interval_s: YOUR_UPDATE_INTERVAL_S
   ray_actor_options:
     num_cpus: 0

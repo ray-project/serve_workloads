@@ -446,7 +446,7 @@ RECEIVER_HELMSMAN_OPTIONS = {
     "receiver_compute_config_id": str,
     "receiver_gcs_external_storage_config": str,
     "cookie": str,
-    "update_interval_s": float,
+    "upgrade_interval_s": float,
 }
 
 
