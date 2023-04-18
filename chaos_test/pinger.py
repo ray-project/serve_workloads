@@ -122,6 +122,7 @@ class Pinger:
             else:
                 print(f'Initializing {option} to "{new_value}"')
             setattr(self, option, new_value)
+        self.stop()
         self.start()
 
     async def run_request_loop(self):
@@ -386,6 +387,7 @@ class Reaper:
             else:
                 print(f'Initializing {option} to "{new_value}"')
             setattr(self, option, new_value)
+        self.stop()
         self.start()
 
     async def kill_loop(self):
@@ -485,6 +487,7 @@ class ReceiverHelmsman:
                 print(f'Initializing {option} to "{new_value}"')
             setattr(self, option, new_value)
         self._update_rest_api_urls()
+        self.stop()
         self.start()
 
     async def run_status_check_loop(self):
