@@ -444,7 +444,7 @@ RECEIVER_HELMSMAN_OPTIONS = {
     "receiver_service_id": str,
     "receiver_build_id": str,
     "receiver_compute_config_id": str,
-    "receiver_gcs_external_storage_config": str,
+    "receiver_gcs_external_storage_config": dict,
     "cookie": str,
     "upgrade_interval_s": float,
 }
