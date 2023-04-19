@@ -16,6 +16,7 @@ from chaos_test.constants import (
     KillOptions,
 )
 from chaos_test.metrics_utils import StringGauge
+from chaos_test.deployment_utils import BaseReconfigurableDeployment
 
 from ray import serve
 from ray.util.metrics import Counter, Gauge
@@ -103,9 +104,9 @@ PINGER_OPTIONS = {
     user_config={option: None for option in PINGER_OPTIONS.keys()},
     ray_actor_options={"num_cpus": 0},
 )
-class Pinger:
+class Pinger(BaseReconfigurableDeployment):
     def __init__(self):
-        self.config_options = PINGER_OPTIONS
+        super().__init__(PINGER_OPTIONS)
         self.request_loop_task = None
         self._initialize_stats()
         self._initialize_metrics()
@@ -113,15 +114,7 @@ class Pinger:
         self.pending_requests = set()
 
     def reconfigure(self, config: Dict):
-        for option, type_cast in self.config_options.items():
-            new_value = type_cast(config.get(option))
-            if hasattr(self, option) and getattr(self, option) != new_value:
-                print(
-                    f'Changing {option} from "{getattr(self, option)}" to "{new_value}"'
-                )
-            else:
-                print(f'Initializing {option} to "{new_value}"')
-            setattr(self, option, new_value)
+        super().reconfigure(config)
         self.stop()
         self.start()
 
@@ -366,9 +359,9 @@ REAPER_OPTIONS = {
     user_config={option: None for option in REAPER_OPTIONS.keys()},
     ray_actor_options={"num_cpus": 0},
 )
-class Reaper:
+class Reaper(BaseReconfigurableDeployment):
     def __init__(self):
-        self.config_options = REAPER_OPTIONS
+        super().__init__(REAPER_OPTIONS)
         self.kill_loop_task = None
         self._initialize_stats()
         self.kill_counter = Counter(
@@ -378,15 +371,7 @@ class Reaper:
         ).set_default_tags({"class": "Reaper"})
 
     def reconfigure(self, config: Dict):
-        for option, type_cast in self.config_options.items():
-            new_value = type_cast(config.get(option))
-            if hasattr(self, option) and getattr(self, option) != new_value:
-                print(
-                    f'Changing {option} from "{getattr(self, option)}" to "{new_value}"'
-                )
-            else:
-                print(f'Initializing {option} to "{new_value}"')
-            setattr(self, option, new_value)
+        super().reconfigure(config)
         self.stop()
         self.start()
 
@@ -457,9 +442,9 @@ RECEIVER_HELMSMAN_OPTIONS = {
     user_config={option: None for option in RECEIVER_HELMSMAN_OPTIONS},
     ray_actor_options={"num_cpus": 0},
 )
-class ReceiverHelmsman:
+class ReceiverHelmsman(BaseReconfigurableDeployment):
     def __init__(self):
-        self.config_options = RECEIVER_HELMSMAN_OPTIONS
+        super().__init__(RECEIVER_HELMSMAN_OPTIONS)
         self.tasks = []
         self._initialize_metrics()
         self._initialize_stats()
@@ -477,15 +462,7 @@ class ReceiverHelmsman:
         self.latest_receiver_upgrade_type = None
 
     def reconfigure(self, config: Dict):
-        for option, type_cast in self.config_options.items():
-            new_value = type_cast(config.get(option))
-            if hasattr(self, option) and getattr(self, option) != new_value:
-                print(
-                    f'Changing {option} from "{getattr(self, option)}" to "{new_value}"'
-                )
-            else:
-                print(f'Initializing {option} to "{new_value}"')
-            setattr(self, option, new_value)
+        super().reconfigure(config)
         self._update_rest_api_urls()
         self.stop()
         self.start()
