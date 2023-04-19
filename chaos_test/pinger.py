@@ -511,8 +511,8 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
             "Receiver status": self.latest_receiver_status,
             "Latest upgrade type": self.latest_receiver_upgrade_type,
             "Latest Receiver import path": self.latest_receiver_import_path,
-            "Current number of in-place upgrade requests": self.current_in_place_upgrade_requests,
-            "Total number of in-place upgrade requests": self.total_in_place_upgrade_requests,
+            "Current in-place upgrade requests": self.current_in_place_upgrade_requests,
+            "Total in-place upgrade requests": self.total_in_place_upgrade_requests,
         }
 
     def _initialize_metrics(self):
