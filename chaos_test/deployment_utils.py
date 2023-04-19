@@ -5,8 +5,8 @@ class BaseReconfigurableDeployment:
     """Contains a boilerplate reconfigure method."""
 
     def __init__(self, config_options):
-        """Initializes the BasePingerService Class.
-
+        """Initializes the object.
+        
         Args:
             config_options: maps all the allowed config options for this class
                 to the corresponding type_cast function. E.g.:
