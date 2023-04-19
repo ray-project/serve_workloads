@@ -558,6 +558,18 @@ class ReceiverHelmsman:
             tag_keys=("class", "upgrade_type"),
         ).set_default_tags({"class": "ReceiverHelmsman"})
 
+        self.in_place_upgrade_counter = Counter(
+            "pinger_receiver_num_in_place_upgrade_requests_sent",
+            description="Number of in-place upgrades sent.",
+            tag_keys=("class",),
+        ).set_default_tags({"class": "ReceiverHelmsman"})
+
+        self.upgrade_failure_counter = Counter(
+            "pinger_receiver_upgrade_requests_failed",
+            description="Number of upgrade requests of any type that failed.",
+            tag_keys=("class",),
+        ).set_default_tags({"class": "ReceiverHelmsman"})
+
     def _initialize_stats(self):
         self.total_in_place_upgrade_requests = 0
         self.current_in_place_upgrade_requests = 0
@@ -596,8 +608,6 @@ class ReceiverHelmsman:
             self.receiver_config_template["deployments"][1]["ray_actor_options"][
                 "resources"
             ] = {self.next_singleton_resource: 1}
-            self.next_receiver_import_path = next(self.receiver_import_paths)
-            self.next_singleton_resource = next(self.receiver_singleton_resource)
             request_data = {
                 "name": self.receiver_service_name,
                 "description": "Receives the pinger's pings.",
@@ -609,8 +619,8 @@ class ReceiverHelmsman:
                 "rollout_strategy": "IN_PLACE",
             }
             print(
-                f"In-place upgrading Receiver to import path "
-                f""""{self.receiver_config_template['import_path']}"."""
+                f"In-place upgrading Receiver using request data: \n"
+                + json.dumps(request_data, indent=4)
             )
             response = requests.put(
                 self.update_put_url,
@@ -635,11 +645,23 @@ class ReceiverHelmsman:
             )
             self.total_in_place_upgrade_requests += 1
             self.current_in_place_upgrade_requests += 1
-            response.raise_for_status()
-            print(
-                f"Finished in-place upgrading Receiver to import path "
-                f""""{self.receiver_config_template['import_path']}"."""
-            )
+            self.in_place_upgrade_counter.inc()
+            if response.status_code == 200:
+                print(
+                    f"In-place upgrade request succeeded. New import path: "
+                    f'"{self.next_receiver_import_path}".'
+                )
+                self.next_receiver_import_path = next(self.receiver_import_paths)
+                self.next_singleton_resource = next(self.receiver_singleton_resource)
+            else:
+                self.upgrade_failure_counter.inc()
+                error_message = (
+                    "Upgrading request failed.\n"
+                    f"* Status code: {response.status_code}"
+                )
+                if "application/json" in response.headers.get("Content-Type", ""):
+                    error_message += f"\n* JSON: {response.json()}"
+                print(error_message)
         except Exception as e:
             print(f"Got exception when in-place upgrading Receiver: {repr(e)}")
 
