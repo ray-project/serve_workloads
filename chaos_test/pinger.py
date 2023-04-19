@@ -623,7 +623,7 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
             self.total_in_place_upgrade_requests += 1
             self.current_in_place_upgrade_requests += 1
             self.in_place_upgrade_counter.inc()
-            if response.status_code == 200:
+            if response.status_code in [200, 202]:
                 print(
                     f"In-place upgrade request succeeded. New import path: "
                     f'"{self.next_receiver_import_path}".'
