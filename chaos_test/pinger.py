@@ -396,6 +396,8 @@ class Reaper(BaseReconfigurableDeployment):
                     "Got following exception when sending kill " f"request: {repr(e)}"
                 )
             self.kill_counter.inc()
+            self.current_kill_requests += 1
+            self.total_kill_requests += 1
 
     def start(self):
         if self.kill_loop_task is not None:
