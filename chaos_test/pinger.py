@@ -154,7 +154,7 @@ class Pinger(BaseReconfigurableDeployment):
                     self._count_failed_request(-2, reason="TimeoutError")
                     self.fail_counter.inc()
                     print(
-                        f"{time.strftime('%b %d – %l:%M%p: ')}"
+                        f"{time.strftime('%b %d -- %l:%M%p: ')}"
                         f"Got exception: \n{repr(e)}"
                     )
                 except Exception as e:
@@ -162,7 +162,7 @@ class Pinger(BaseReconfigurableDeployment):
                     self._increment_error_counter(-1)
                     self.fail_counter.inc()
                     print(
-                        f"{time.strftime('%b %d – %l:%M%p: ')}"
+                        f"{time.strftime('%b %d -- %l:%M%p: ')}"
                         f"Got exception: \n{repr(e)}"
                     )
                 else:
@@ -177,7 +177,7 @@ class Pinger(BaseReconfigurableDeployment):
                         self._increment_error_counter(status_code)
                 if self.current_num_requests % (self.max_qps * 10) == 0:
                     print(
-                        f"{time.strftime('%b %d – %l:%M%p: ')}"
+                        f"{time.strftime('%b %d -- %l:%M%p: ')}"
                         f"Sent {self.current_num_requests} "
                         f'requests to "{self.receiver_url}".'
                     )
@@ -477,7 +477,7 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
     async def run_upgrade_loop(self):
         while True:
             print(
-                f"{time.strftime('%b %d – %l:%M%p: ')}Waiting "
+                f"{time.strftime('%b %d -- %l:%M%p: ')}Waiting "
                 f"{self.upgrade_interval_s} seconds before upgrading Receiver."
             )
             await asyncio.sleep(self.upgrade_interval_s)
