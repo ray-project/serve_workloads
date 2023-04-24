@@ -7,6 +7,7 @@ import itertools
 from typing import Dict
 from pathlib import Path
 from fastapi import FastAPI
+import aiohttp
 from aiohttp import TraceConfig
 from aiohttp_retry import RetryClient, ExponentialRetry
 
@@ -337,7 +338,7 @@ class Pinger(BaseReconfigurableDeployment):
                 attempts=5,
                 start_timeout=1,
                 factor=2,
-                exceptions=[asyncio.TimeoutError],
+                exceptions=[asyncio.TimeoutError, aiohttp.ServerDisconnectedError],
             ),
             trace_configs=[trace_config],
         )
