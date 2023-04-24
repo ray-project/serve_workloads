@@ -1549,7 +1549,7 @@
             "targets": [
                 {
                     "exemplar": true,
-                    "expr": "max(ray_pinger_receiver_status{Clusterid=~\"$ClusterId\"}) by (status)",
+                    "expr": "max(ray_pinger_receiver_status{ClusterId=~\"$ClusterId\"}) by (status)",
                     "format": "time_series",
                     "interval": "",
                     "legendFormat": "",
@@ -1667,7 +1667,7 @@
             "targets": [
                 {
                     "exemplar": true,
-                    "expr": "max(ray_pinger_receiver_status{Clusterid=~\"$ClusterId\"}) by (status)",
+                    "expr": "max(ray_pinger_receiver_status{ClusterId=~\"$ClusterId\"}) by (status)",
                     "format": "time_series",
                     "interval": "",
                     "legendFormat": "",
@@ -1777,7 +1777,7 @@
             "targets": [
                 {
                     "exemplar": true,
-                    "expr": "max(ray_pinger_latest_receiver_import_path{Clusterid=~\"$ClusterId\"}) by (import_path)",
+                    "expr": "max(ray_pinger_latest_receiver_import_path{ClusterId=~\"$ClusterId\"}) by (import_path)",
                     "format": "time_series",
                     "interval": "",
                     "legendFormat": "",
