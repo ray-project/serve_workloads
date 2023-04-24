@@ -335,7 +335,7 @@ class Pinger(BaseReconfigurableDeployment):
         return RetryClient(
             retry_options=ExponentialRetry(
                 attempts=5,
-                start_timeout=0.1,
+                start_timeout=1,
                 factor=2,
                 exceptions=[asyncio.TimeoutError],
             ),
