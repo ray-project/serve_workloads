@@ -366,19 +366,7 @@ class Reaper(BaseReconfigurableDeployment):
         self._initialize_stats()
         self.kill_options = itertools.cycle(KillOptions.kill_types())
         self.next_kill_option = next(self.kill_options)
-
-        self.kill_counter = Counter(
-            "pinger_num_kill_requests_sent",
-            description="Number of kill requests sent.",
-            tag_keys=("class",),
-        ).set_default_tags({"class": "Reaper"})
-
-        self.latest_kill_method = StringGauge(
-            label_name="method",
-            name="pinger_latest_kill_method",
-            description="Latest method used to kill a Receiver node.",
-            tag_keys=("class", "method"),
-        ).set_default_tags({"class": "Reaper"})
+        self._initialize_metrics()
 
     def reconfigure(self, config: Dict):
         super().reconfigure(config)
@@ -439,6 +427,20 @@ class Reaper(BaseReconfigurableDeployment):
     def _initialize_stats(self):
         self.total_kill_requests = 0
         self.current_kill_requests = 0
+
+    def _initialize_metrics(self):
+        self.kill_counter = Counter(
+            "pinger_num_kill_requests_sent",
+            description="Number of kill requests sent.",
+            tag_keys=("class",),
+        ).set_default_tags({"class": "Reaper"})
+
+        self.latest_kill_method = StringGauge(
+            label_name="method",
+            name="pinger_latest_kill_method",
+            description="Latest method used to kill a Receiver node.",
+            tag_keys=("class", "method"),
+        ).set_default_tags({"class": "Reaper"})
 
 
 RECEIVER_HELMSMAN_OPTIONS = {
