@@ -364,10 +364,20 @@ class Reaper(BaseReconfigurableDeployment):
         super().__init__(REAPER_OPTIONS)
         self.kill_loop_task = None
         self._initialize_stats()
+        self.kill_options = itertools.cycle(KillOptions.kill_types())
+        self.next_kill_option = next(self.kill_options)
+
         self.kill_counter = Counter(
             "pinger_num_kill_requests_sent",
             description="Number of kill requests sent.",
             tag_keys=("class",),
+        ).set_default_tags({"class": "Reaper"})
+
+        self.latest_kill_method = StringGauge(
+            label_name="method",
+            name="pinger_latest_kill_method",
+            description="Latest method used to kill a Receiver node.",
+            tag_keys=("class", "method"),
         ).set_default_tags({"class": "Reaper"})
 
     def reconfigure(self, config: Dict):
@@ -382,9 +392,11 @@ class Reaper(BaseReconfigurableDeployment):
                 "next kill request."
             )
             await asyncio.sleep(self.kill_interval_s)
-            json_payload = {RECEIVER_KILL_KEY: KillOptions.KILL}
+            json_payload = {RECEIVER_KILL_KEY: self.next_kill_option}
             try:
-                print("Sending kill request.")
+                print(
+                    f'Sending kill request with method "{self.next_kill_option.value}".'
+                )
                 requests.post(
                     self.receiver_url,
                     headers={"Authorization": f"Bearer {self.receiver_bearer_token}"},
@@ -392,10 +404,12 @@ class Reaper(BaseReconfigurableDeployment):
                     timeout=3,
                 )
             except Exception as e:
-                print(
-                    "Got following exception when sending kill " f"request: {repr(e)}"
-                )
+                print(f"Got following exception when sending kill request: {repr(e)}")
             self.kill_counter.inc()
+            self.latest_kill_method.set(
+                tags={"class": "Reaper", "method": self.next_kill_option.value}
+            )
+            self.next_kill_option = next(self.kill_options)
             self.current_kill_requests += 1
             self.total_kill_requests += 1
 

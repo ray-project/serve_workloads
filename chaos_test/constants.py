@@ -4,8 +4,14 @@ RECEIVER_KILL_KEY = "kill_node"
 
 
 class KillOptions(str, Enum):
-    KILL = "kill"
+    RAY_STOP = "ray_stop"
+    NODE_HALT = "node_halt"
     SPARE = "spare"
+
+    @classmethod
+    def kill_types(cls):
+        """Returns a list of enum options that kill a node."""
+        return [cls.RAY_STOP, cls.NODE_HALT]
 
 
 class ServiceStatus(str, Enum):

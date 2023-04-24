@@ -33,12 +33,22 @@ class Receiver:
     async def __call__(self, request: Request):
         request_json = await request.json()
         kill_node = request_json.get(RECEIVER_KILL_KEY, KillOptions.SPARE)
-        if kill_node == KillOptions.KILL:
-            print("Received kill request. Attempting to kill a node.")
+        if kill_node == KillOptions.RAY_STOP:
+            print("Received ray stop request. Attempting to kill a node.")
             await asyncio.wait(
                 [
                     asyncio.wait(
-                        [self.node_killer_handle.kill_node.remote()], timeout=10
+                        [self.node_killer_handle.ray_stop_node.remote()], timeout=10
+                    )
+                ],
+                timeout=10,
+            )
+        elif kill_node == KillOptions.NODE_HALT:
+            print("Received node halt request. Attempting to kill a node.")
+            await asyncio.wait(
+                [
+                    asyncio.wait(
+                        [self.node_killer_handle.halt_node.remote()], timeout=10
                     )
                 ],
                 timeout=10,
@@ -48,7 +58,7 @@ class Receiver:
 
 @serve.deployment(num_replicas=1, ray_actor_options={"num_cpus": 0})
 class NodeKiller:
-    def kill_node(self):
+    def ray_stop_node(self):
         try:
             actors = list_actors(filters=[("state", "=", "ALIVE")], timeout=3)
             print(f"Actor summary:\n{json.dumps(actors, indent=4)}")
@@ -56,6 +66,16 @@ class NodeKiller:
             print(f"Failed to get actor info. Got exception\n{e}")
         print(f"Killing node {ray.get_runtime_context().get_node_id()}")
         subprocess.call(["ray", "stop", "-f"])
+        return ""
+
+    def halt_node(self):
+        try:
+            actors = list_actors(filters=[("state", "=", "ALIVE")], timeout=3)
+            print(f"Actor summary:\n{json.dumps(actors, indent=4)}")
+        except Exception as e:
+            print(f"Failed to get actor info. Got exception\n{e}")
+        print(f"Killing node {ray.get_runtime_context().get_node_id()}")
+        subprocess.call(["sudo", "halt", "--force"])
         return ""
 
 
