@@ -16,8 +16,8 @@
     "editable": true,
     "gnetId": null,
     "graphTooltip": 0,
-    "id": 42699,
-    "iteration": 1681947683847,
+    "id": 42932,
+    "iteration": 1682383822671,
     "links": [],
     "panels": [
         {
@@ -1033,13 +1033,207 @@
             }
         },
         {
+            "bars": false,
+            "dashLength": 10,
+            "dashes": false,
+            "datasource": "Prometheus",
+            "description": "The latency of the latest request sent to the Receiver. Measured in seconds.",
+            "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+            },
+            "fill": 1,
+            "fillGradient": 0,
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 42
+            },
+            "hiddenSeries": false,
+            "id": 31,
+            "legend": {
+                "avg": false,
+                "current": false,
+                "max": false,
+                "min": false,
+                "show": true,
+                "total": false,
+                "values": false
+            },
+            "lines": true,
+            "linewidth": 1,
+            "nullPointMode": "null",
+            "options": {
+                "alertThreshold": true
+            },
+            "percentage": false,
+            "pluginVersion": "7.5.17",
+            "pointradius": 2,
+            "points": false,
+            "renderer": "flot",
+            "seriesOverrides": [],
+            "spaceLength": 10,
+            "stack": false,
+            "steppedLine": false,
+            "targets": [
+                {
+                    "exemplar": true,
+                    "expr": "ray_pinger_request_latency{ClusterId=~\"$ClusterId\"}",
+                    "instant": false,
+                    "interval": "",
+                    "intervalFactor": 1,
+                    "legendFormat": "Request latency (s)",
+                    "queryType": "randomWalk",
+                    "refId": "Request Latency"
+                }
+            ],
+            "thresholds": [],
+            "timeFrom": null,
+            "timeRegions": [],
+            "timeShift": null,
+            "title": "Request Latency",
+            "tooltip": {
+                "shared": true,
+                "sort": 0,
+                "value_type": "individual"
+            },
+            "type": "graph",
+            "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+            },
+            "yaxes": [
+                {
+                    "format": "short",
+                    "label": null,
+                    "logBase": 1,
+                    "max": null,
+                    "min": null,
+                    "show": true
+                },
+                {
+                    "format": "short",
+                    "label": null,
+                    "logBase": 1,
+                    "max": null,
+                    "min": null,
+                    "show": true
+                }
+            ],
+            "yaxis": {
+                "align": false,
+                "alignLevel": null
+            }
+        },
+        {
+            "bars": false,
+            "dashLength": 10,
+            "dashes": false,
+            "datasource": "Prometheus",
+            "description": "The average latency of requests sent to the Receiver. Averaged over 10 minute window and measured in seconds.",
+            "fieldConfig": {
+                "defaults": {},
+                "overrides": []
+            },
+            "fill": 1,
+            "fillGradient": 0,
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 42
+            },
+            "hiddenSeries": false,
+            "id": 32,
+            "legend": {
+                "avg": false,
+                "current": false,
+                "max": false,
+                "min": false,
+                "show": true,
+                "total": false,
+                "values": false
+            },
+            "lines": true,
+            "linewidth": 1,
+            "nullPointMode": "null",
+            "options": {
+                "alertThreshold": true
+            },
+            "percentage": false,
+            "pluginVersion": "7.5.17",
+            "pointradius": 2,
+            "points": false,
+            "renderer": "flot",
+            "seriesOverrides": [],
+            "spaceLength": 10,
+            "stack": false,
+            "steppedLine": false,
+            "targets": [
+                {
+                    "exemplar": true,
+                    "expr": "avg_over_time(ray_pinger_request_latency{ClusterId=~\"$ClusterId\"}[10m])",
+                    "instant": false,
+                    "interval": "",
+                    "intervalFactor": 1,
+                    "legendFormat": "Average request latency (s)",
+                    "queryType": "randomWalk",
+                    "refId": "Average Request Latency"
+                }
+            ],
+            "thresholds": [],
+            "timeFrom": null,
+            "timeRegions": [],
+            "timeShift": null,
+            "title": "Average Request Latency",
+            "tooltip": {
+                "shared": true,
+                "sort": 0,
+                "value_type": "individual"
+            },
+            "type": "graph",
+            "xaxis": {
+                "buckets": null,
+                "mode": "time",
+                "name": null,
+                "show": true,
+                "values": []
+            },
+            "yaxes": [
+                {
+                    "format": "short",
+                    "label": null,
+                    "logBase": 1,
+                    "max": null,
+                    "min": null,
+                    "show": true
+                },
+                {
+                    "format": "short",
+                    "label": null,
+                    "logBase": 1,
+                    "max": null,
+                    "min": null,
+                    "show": true
+                }
+            ],
+            "yaxis": {
+                "align": false,
+                "alignLevel": null
+            }
+        },
+        {
             "collapsed": false,
             "datasource": null,
             "gridPos": {
                 "h": 1,
                 "w": 24,
                 "x": 0,
-                "y": 42
+                "y": 50
             },
             "id": 19,
             "panels": [],
@@ -1065,7 +1259,7 @@
                 "h": 8,
                 "w": 12,
                 "x": 0,
-                "y": 43
+                "y": 51
             },
             "hiddenSeries": false,
             "id": 20,
@@ -1165,7 +1359,7 @@
                 "h": 8,
                 "w": 12,
                 "x": 12,
-                "y": 43
+                "y": 51
             },
             "hiddenSeries": false,
             "id": 21,
@@ -1267,7 +1461,7 @@
                 "h": 8,
                 "w": 12,
                 "x": 0,
-                "y": 51
+                "y": 59
             },
             "hiddenSeries": false,
             "id": 22,
@@ -1385,7 +1579,7 @@
                 "h": 8,
                 "w": 12,
                 "x": 12,
-                "y": 51
+                "y": 59
             },
             "hiddenSeries": false,
             "id": 23,
@@ -1489,7 +1683,7 @@
                 "h": 1,
                 "w": 24,
                 "x": 0,
-                "y": 59
+                "y": 67
             },
             "id": 25,
             "panels": [],
@@ -1518,7 +1712,7 @@
                 "h": 8,
                 "w": 12,
                 "x": 0,
-                "y": 60
+                "y": 68
             },
             "hiddenSeries": false,
             "id": 28,
@@ -1636,7 +1830,7 @@
                 "h": 8,
                 "w": 12,
                 "x": 12,
-                "y": 60
+                "y": 68
             },
             "hiddenSeries": false,
             "id": 29,
@@ -1746,7 +1940,7 @@
                 "h": 8,
                 "w": 12,
                 "x": 0,
-                "y": 68
+                "y": 76
             },
             "hiddenSeries": false,
             "id": 30,
@@ -1851,7 +2045,7 @@
         "list": [
             {
                 "current": {
-                    "selected": false,
+                    "selected": true,
                     "text": ".*",
                     "value": ".*"
                 },
