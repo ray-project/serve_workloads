@@ -492,13 +492,16 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
             await asyncio.sleep(5)
 
     async def run_upgrade_loop(self):
+        upgrade_type_iter = itertools.cycle(["IN_PLACE", "ROLLING"])
         while True:
+            next_upgrade_type = next(upgrade_type_iter)
             print(
                 f"{time.strftime('%b %d -- %l:%M%p: ')}Waiting "
-                f"{self.upgrade_interval_s} seconds before upgrading Receiver."
+                f"{self.upgrade_interval_s} seconds before "
+                f"{next_upgrade_type} upgrading Receiver."
             )
             await asyncio.sleep(self.upgrade_interval_s)
-            self._in_place_update_receiver()
+            self._in_place_update_receiver(next_upgrade_type)
 
     def start(self):
         task_methods = [self.run_status_check_loop, self.run_upgrade_loop]
@@ -528,8 +531,8 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
             "Receiver status": self.latest_receiver_status,
             "Latest upgrade type": self.latest_receiver_upgrade_type,
             "Latest Receiver import path": self.latest_receiver_import_path,
-            "Current in-place upgrade requests": self.current_in_place_upgrade_requests,
-            "Total in-place upgrade requests": self.total_in_place_upgrade_requests,
+            "Current in-place upgrade requests": self.current_upgrade_requests,
+            "Total in-place upgrade requests": self.total_upgrade_requests,
         }
 
     def _initialize_metrics(self):
@@ -554,9 +557,10 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
             tag_keys=("class", "upgrade_type"),
         ).set_default_tags({"class": "ReceiverHelmsman"})
 
-        self.in_place_upgrade_counter = Counter(
-            "pinger_receiver_num_in_place_upgrade_requests_sent",
-            description="Number of in-place upgrades sent.",
+        # TODO (shrekris-anyscale): Make this metric track any upgrades.
+        self.upgrade_counter = Counter(
+            "pinger_receiver_num_upgrade_requests_sent",
+            description="Number of upgrade requests sent.",
             tag_keys=("class",),
         ).set_default_tags({"class": "ReceiverHelmsman"})
 
@@ -567,8 +571,8 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
         ).set_default_tags({"class": "ReceiverHelmsman"})
 
     def _initialize_stats(self):
-        self.total_in_place_upgrade_requests = 0
-        self.current_in_place_upgrade_requests = 0
+        self.total_upgrade_requests = 0
+        self.current_upgrade_requests = 0
 
     def _update_rest_api_urls(self):
         self.status_get_url = f"https://console.anyscale-staging.com/api/v2/services-v2/{self.receiver_service_id}"
@@ -596,7 +600,7 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
 
         return receiver_config_template
 
-    def _in_place_update_receiver(self):
+    def _in_place_update_receiver(self, upgrade_type: str):
         try:
             self.receiver_config_template[
                 "import_path"
@@ -612,10 +616,10 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
                 "build_id": self.receiver_build_id,
                 "compute_config_id": self.receiver_compute_config_id,
                 "ray_gcs_external_storage_config": self.receiver_gcs_external_storage_config,
-                "rollout_strategy": "IN_PLACE",
+                "rollout_strategy": upgrade_type,
             }
             print(
-                f"In-place upgrading Receiver using request data: \n"
+                f"{upgrade_type} upgrading Receiver using request data: \n"
                 + json.dumps(request_data, indent=4)
             )
             response = requests.put(
@@ -623,7 +627,7 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
                 data=json.dumps(request_data),
                 headers={"Cookie": self.cookie},
             )
-            self.latest_receiver_upgrade_type = "IN_PLACE"
+            self.latest_receiver_upgrade_type = upgrade_type
             self.receiver_upgrade_gauge.set(
                 {
                     "class": "ReceiverHelmsman",
@@ -639,13 +643,13 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
                     "import_path": self.latest_receiver_import_path,
                 }
             )
-            self.total_in_place_upgrade_requests += 1
-            self.current_in_place_upgrade_requests += 1
-            self.in_place_upgrade_counter.inc()
+            self.total_upgrade_requests += 1
+            self.current_upgrade_requests += 1
+            self.upgrade_counter.inc()
             if response.status_code in [200, 202]:
                 print(
-                    f"In-place upgrade request succeeded. New import path: "
-                    f'"{self.next_receiver_import_path}".'
+                    f"{upgrade_type} upgrade request succeeded. New import "
+                    f'path: "{self.next_receiver_import_path}".'
                 )
                 self.next_receiver_import_path = next(self.receiver_import_paths)
                 self.next_singleton_resource = next(self.receiver_singleton_resource)
@@ -659,7 +663,9 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
                     error_message += f"\n* JSON: {response.json()}"
                 print(error_message)
         except Exception as e:
-            print(f"Got exception when in-place upgrading Receiver: {repr(e)}")
+            print(
+                f"Got exception when {upgrade_type} upgrading Receiver: " f"{repr(e)}"
+            )
 
 
 graph = Router.bind(Pinger.bind(), Reaper.bind(), ReceiverHelmsman.bind())

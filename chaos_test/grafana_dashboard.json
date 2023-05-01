@@ -1725,11 +1725,11 @@
           },
           {
             "exemplar": true,
-            "expr": "rate(ray_pinger_receiver_num_in_place_upgrade_requests_sent{ClusterId=~\"$ClusterId\"}[30s])",
+            "expr": "rate(ray_pinger_receiver_num__upgrade_requests_sent{ClusterId=~\"$ClusterId\"}[30s])",
             "hide": false,
             "interval": "",
-            "legendFormat": "Rate of in-place upgrade requests sent (requests/second)",
-            "refId": "Rate of In-Place Upgrade Requests"
+            "legendFormat": "Rate of upgrade requests sent (requests/second)",
+            "refId": "Rate of Upgrade Requests"
           }
         ],
         "thresholds": [],
@@ -1833,11 +1833,11 @@
           },
           {
             "exemplar": true,
-            "expr": "rate(ray_pinger_receiver_num_in_place_upgrade_requests_sent{ClusterId=~\"$ClusterId\"}[30s])",
+            "expr": "rate(ray_pinger_receiver_num_upgrade_requests_sent{ClusterId=~\"$ClusterId\"}[30s])",
             "hide": false,
             "interval": "",
-            "legendFormat": "Rate of in-place upgrade requests sent (requests/second)",
-            "refId": "Rate of In-Place Upgrade Requests"
+            "legendFormat": "Rate of upgrade requests sent (requests/second)",
+            "refId": "Rate of Upgrade Requests"
           },
           {
             "exemplar": true,
@@ -1907,7 +1907,7 @@
       },
       {
         "aliasColors": {
-          "Rate of in-place upgrade requests sent (requests / second)": "blue",
+          "Rate of upgrade requests sent (requests / second)": "blue",
           "Rate of node kill requests sent (requests / second)": "super-light-blue",
           "{status=\"UNHEALTHY\"}": "red",
           "{status=\"UPDATING\"}": "yellow"
@@ -1967,11 +1967,11 @@
           },
           {
             "exemplar": true,
-            "expr": "rate(ray_pinger_receiver_num_in_place_upgrade_requests_sent{ClusterId=~\"$ClusterId\"}[30s])",
+            "expr": "rate(ray_pinger_receiver_num__upgrade_requests_sent{ClusterId=~\"$ClusterId\"}[30s])",
             "hide": false,
             "interval": "",
-            "legendFormat": "Rate of in-place upgrade requests sent (requests / second)",
-            "refId": "Rate of In-Place Upgrade Requests Sent"
+            "legendFormat": "Rate of upgrade requests sent (requests / second)",
+            "refId": "Rate of Upgrade Requests Sent"
           },
           {
             "exemplar": true,
@@ -2025,7 +2025,7 @@
       },
       {
         "aliasColors": {
-          "Rate of in-place upgrade requests sent (requests / second)": "blue",
+          "Rate of upgrade requests sent (requests / second)": "blue",
           "Rate of node kill requests sent (requests / second)": "super-light-blue",
           "{status=\"UNHEALTHY\"}": "red",
           "{status=\"UPDATING\"}": "yellow"
@@ -2135,7 +2135,7 @@
       },
       {
         "aliasColors": {
-          "Rate of in-place upgrade requests sent (requests / second)": "blue",
+          "Rate of upgrade requests sent (requests / second)": "blue",
           "Rate of node kill requests sent (requests / second)": "super-light-blue",
           "{status=\"UNHEALTHY\"}": "red",
           "{status=\"UPDATING\"}": "yellow"
@@ -2195,18 +2195,18 @@
           },
           {
             "exemplar": true,
-            "expr": "rate(ray_pinger_receiver_num_in_place_upgrade_requests_sent{ClusterId=~\"$ClusterId\"}[30s])",
+            "expr": "rate(ray_pinger_receiver_num__upgrade_requests_sent{ClusterId=~\"$ClusterId\"}[30s])",
             "hide": false,
             "interval": "",
-            "legendFormat": "Rate of in-place upgrade requests sent (requests / second)",
-            "refId": "Rate of In-Place Upgrade Requests Sent"
+            "legendFormat": "Rate of upgrade requests sent (requests / second)",
+            "refId": "Rate of Upgrade Requests Sent"
           },
           {
             "exemplar": true,
             "expr": "rate(ray_pinger_receiver_upgrade_requests_failed{ClusterId=~\"$ClusterId\"}[30s])",
             "hide": false,
             "interval": "",
-            "legendFormat": "Rate of failed in-place upgrade requests",
+            "legendFormat": "Rate of failed upgrade requests",
             "refId": "Rate of Failed Upgrade Requests"
           }
         ],
