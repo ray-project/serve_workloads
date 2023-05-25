@@ -504,7 +504,7 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
                 f"{next_upgrade_type} upgrading Receiver."
             )
             await asyncio.sleep(self.upgrade_interval_s)
-            self._in_place_update_receiver(next_upgrade_type)
+            self._upgrade_receiver(next_upgrade_type)
 
     async def run_disk_leaker_monitoring(self):
         while True:
@@ -631,7 +631,7 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
 
         return receiver_config_template
 
-    def _in_place_update_receiver(self, upgrade_type: str):
+    def _upgrade_receiver(self, upgrade_type: str):
         try:
             self.receiver_config_template[
                 "import_path"
