@@ -13,7 +13,7 @@ from aiohttp_retry import RetryClient, ExponentialRetry
 
 from chaos_test.constants import (
     RECEIVER_CONFIG_FILENAME,
-    RECEIVER_KILL_KEY,
+    NODE_KILLER_KEY,
     KillOptions,
 )
 from chaos_test.metrics_utils import StringGauge
@@ -124,7 +124,7 @@ class Pinger(BaseReconfigurableDeployment):
         send_interval_s = 1 / self.max_qps
 
         while True:
-            json_payload = {RECEIVER_KILL_KEY: KillOptions.SPARE}
+            json_payload = {NODE_KILLER_KEY: KillOptions.SPARE}
 
             start_time = asyncio.get_event_loop().time()
 
@@ -381,7 +381,7 @@ class Reaper(BaseReconfigurableDeployment):
                 "next kill request."
             )
             await asyncio.sleep(self.kill_interval_s)
-            json_payload = {RECEIVER_KILL_KEY: self.next_kill_option}
+            json_payload = {NODE_KILLER_KEY: self.next_kill_option}
             try:
                 print(
                     f'Sending kill request with method "{self.next_kill_option.value}".'

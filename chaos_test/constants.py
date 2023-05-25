@@ -1,6 +1,7 @@
 from enum import Enum
 
-RECEIVER_KILL_KEY = "kill_node"
+NODE_KILLER_KEY = "kill_node"
+DISK_LEAKER_KEY = "disk_leaker"
 
 
 class KillOptions(str, Enum):

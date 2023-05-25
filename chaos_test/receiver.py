@@ -4,10 +4,11 @@ import asyncio
 import subprocess
 from starlette.requests import Request
 
-from chaos_test.constants import RECEIVER_KILL_KEY, KillOptions
+from chaos_test.constants import NODE_KILLER_KEY, DISK_LEAKER_KEY, KillOptions
 
 import ray
 from ray import serve
+from ray._private.utils import run_background_task
 from ray.experimental.state.api import list_actors
 
 
@@ -23,16 +24,20 @@ from ray.experimental.state.api import list_actors
     },
 )
 class Receiver:
-    def __init__(self, name, node_killer_handle):
+    def __init__(self, name, node_killer_handle, disk_leaker_handle):
         self.name = name
         self.node_killer_handle = node_killer_handle
+        self.disk_leaker_handle = disk_leaker_handle
         print(
             f"Receiver actor starting on node {ray.get_runtime_context().get_node_id()}"
         )
 
     async def __call__(self, request: Request):
         request_json = await request.json()
-        kill_node = request_json.get(RECEIVER_KILL_KEY, KillOptions.SPARE)
+        if DISK_LEAKER_KEY in request_json:
+            print("Received disk leaker info request.")
+            return self.disk_leaker_handle.info.remote()
+        kill_node = request_json.get(NODE_KILLER_KEY, KillOptions.SPARE)
         if kill_node == KillOptions.RAY_STOP:
             print("Received ray stop request. Attempting to kill a node.")
             await asyncio.wait(
@@ -56,7 +61,15 @@ class Receiver:
         return f"(PID: {os.getpid()}) {self.name} Receiver running!"
 
 
-@serve.deployment(num_replicas=1, ray_actor_options={"num_cpus": 0})
+@serve.deployment(
+    num_replicas=1,
+    ray_actor_options={
+        "num_cpus": 0,
+        "resources": {
+            "node_singleton": 1,
+        },
+    },
+)
 class NodeKiller:
     def ray_stop_node(self):
         try:
@@ -77,6 +90,44 @@ class NodeKiller:
         print(f"Killing node {ray.get_runtime_context().get_node_id()}")
         subprocess.call(["sudo", "halt", "--force"])
         return ""
+
+
+@serve.deployment(
+    num_replicas=1,
+    ray_actor_options={
+        "num_cpus": 0,
+        "resources": {
+            "leak_singleton": 1,
+        },
+    },
+)
+class DiskLeaker:
+    def __init__(self):
+        self.leak_dir = "/tmp/disk_leaker_files/"
+        self.leak_file_name = "leak_file.log"
+        self.file_idx = 0
+        self.num_writes_to_disk = 0
+        os.mkdir(self.leak_dir)
+        run_background_task(self.leak())
+
+    def info(self):
+        return self.num_writes_to_disk
+
+    def write_file(self):
+        num_GB, GB = 1, (1024 * 1024 * 1024)
+        filename = f"{self.file_idx}_{self.leak_file_name}"
+
+        print(f'Writing {num_GB}GB to file "{filename}".')
+        with open(filename, "w+") as f:
+            f.write("0" * num_GB * self.GB)
+        self.file_idx += 1
+
+    async def leak(self):
+        num_hours, hours = 0.25, 60 * 60
+        while True:
+            self.write_file()
+            print(f"Waiting {num_hours} hours before writing again.")
+            await asyncio.sleep(0.25 * hours)
 
 
 alpha = Receiver.bind("Alpha", NodeKiller.bind())
