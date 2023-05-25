@@ -38,7 +38,7 @@ class Receiver:
         request_json = await request.json()
         if DISK_LEAKER_KEY in request_json:
             print("Received disk leaker info request.")
-            return self.disk_leaker_handle.info.remote()
+            return await (await self.disk_leaker_handle.info.remote())
         kill_node = request_json.get(NODE_KILLER_KEY, KillOptions.SPARE)
         if kill_node == KillOptions.RAY_STOP:
             print("Received ray stop request. Attempting to kill a node.")
