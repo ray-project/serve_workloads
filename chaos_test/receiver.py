@@ -1,7 +1,9 @@
 import os
 import json
+import time
 import asyncio
 import subprocess
+from datetime import datetime
 from starlette.requests import Request
 
 from chaos_test.constants import NODE_KILLER_KEY, DISK_LEAKER_KEY, KillOptions
@@ -105,7 +107,6 @@ class DiskLeaker:
     def __init__(self):
         self.leak_dir = "/tmp/disk_leaker_files/"
         self.leak_file_name = "leak_file.log"
-        self.file_idx = 0
         self.num_writes_to_disk = 0
         os.mkdir(self.leak_dir)
         run_background_task(self.leak())
@@ -115,12 +116,15 @@ class DiskLeaker:
 
     def write_file(self):
         num_GB, GB = 1, (1024 * 1024 * 1024)
-        filename = f"{self.file_idx}_{self.leak_file_name}"
+        timestamp = "{:%Y-%m-%d-%H-%M-%S-%f-%p}".format(datetime.now())
+        filename = f"{timestamp}-{self.leak_file_name}"
 
-        print(f'Writing {num_GB}GB to file "{filename}".')
+        print(
+            f"{time.strftime('%b %d -- %l:%M%p: ')}Writing {num_GB}GB to "
+            f'file "{filename}".'
+        )
         with open(filename, "w+") as f:
-            f.write("0" * num_GB * self.GB)
-        self.file_idx += 1
+            f.write("0" * num_GB * GB)
 
     async def leak(self):
         num_hours, hours = 0.25, 60 * 60
@@ -130,5 +134,5 @@ class DiskLeaker:
             await asyncio.sleep(0.25 * hours)
 
 
-alpha = Receiver.bind("Alpha", NodeKiller.bind())
-beta = Receiver.bind("Beta", NodeKiller.bind())
+alpha = Receiver.bind("Alpha", NodeKiller.bind(), DiskLeaker.bind())
+beta = Receiver.bind("Beta", NodeKiller.bind(), DiskLeaker.bind())
