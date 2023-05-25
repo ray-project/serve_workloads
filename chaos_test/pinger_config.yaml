@@ -3,7 +3,7 @@
 import_path: chaos_test.pinger:graph
 
 runtime_env:
-  working_dir: https://github.com/ray-project/serve_workloads/archive/28757e8ecffec6f40dec31c6ed15b97d7de9b060.zip
+  working_dir: https://github.com/ray-project/serve_workloads/archive/ca79b432754f6c061f942db7551177035a7e7503.zip
   env_vars:
     RAY_SERVE_REQUEST_PROCESSING_TIMEOUT_S: '1'
 
@@ -41,6 +41,8 @@ deployments:
     receiver_build_id: YOUR_RECEIVER_BUILD_ID
     receiver_compute_config_id: YOUR_RECEIVER_COMPUTE_CONFIG_ID
     receiver_gcs_external_storage_config: YOUR_RECEIVER_GCS_EXTERNAL_STORAGE_CONFIG
+    receiver_url: YOUR_RECEIVER_URL
+    receiver_bearer_token: YOUR_RECEIVER_BEARER_TOKEN
     cookie: YOUR_COOKIE
     upgrade_interval_s: YOUR_UPDATE_INTERVAL_S
   ray_actor_options:
