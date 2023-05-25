@@ -14,6 +14,7 @@ from aiohttp_retry import RetryClient, ExponentialRetry
 from chaos_test.constants import (
     RECEIVER_CONFIG_FILENAME,
     NODE_KILLER_KEY,
+    DISK_LEAKER_KEY,
     KillOptions,
 )
 from chaos_test.metrics_utils import StringGauge
@@ -451,6 +452,8 @@ RECEIVER_HELMSMAN_OPTIONS = {
     "receiver_build_id": str,
     "receiver_compute_config_id": str,
     "receiver_gcs_external_storage_config": dict,
+    "receiver_url": str,
+    "receiver_bearer_token": str,
     "cookie": str,
     "upgrade_interval_s": float,
 }
@@ -503,8 +506,28 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
             await asyncio.sleep(self.upgrade_interval_s)
             self._in_place_update_receiver(next_upgrade_type)
 
+    async def run_disk_leaker_monitoring(self):
+        while True:
+            try:
+                json_payload = {DISK_LEAKER_KEY: "arbitrary"}
+                response = requests.post(
+                    self.receiver_url,
+                    headers={"Authorization": f"Bearer {self.receiver_bearer_token}"},
+                    json=json_payload,
+                    timeout=10,
+                )
+                self.num_writes_to_disk = int(response.text)
+                self.num_writes_to_disk_gauge.set(self.num_writes_to_disk)
+            except Exception as e:
+                print(f"Got exception when checking disk writes: {repr(e)}")
+            await asyncio.sleep(5 * 60)
+
     def start(self):
-        task_methods = [self.run_status_check_loop, self.run_upgrade_loop]
+        task_methods = [
+            self.run_status_check_loop,
+            self.run_upgrade_loop,
+            self.run_disk_leaker_monitoring,
+        ]
         if len(self.tasks) > 0:
             print(
                 "Called start() while ReceiverHelmsman is already running. Nothing changed."
@@ -533,6 +556,7 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
             "Latest Receiver import path": self.latest_receiver_import_path,
             "Current in-place upgrade requests": self.current_upgrade_requests,
             "Total in-place upgrade requests": self.total_upgrade_requests,
+            "Number of writes to disk": self.num_writes_to_disk,
         }
 
     def _initialize_metrics(self):
@@ -557,6 +581,12 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
             tag_keys=("class", "upgrade_type"),
         ).set_default_tags({"class": "ReceiverHelmsman"})
 
+        self.num_writes_to_disk_gauge = Gauge(
+            "pinger_num_writes_to_disk_receiver",
+            description="Number of writes to disk by Receiver's DiskLeaker.",
+            tag_keys=("class",),
+        ).set_default_tags({"class": "Pinger"})
+
         # TODO (shrekris-anyscale): Make this metric track any upgrades.
         self.upgrade_counter = Counter(
             "pinger_receiver_num_upgrade_requests_sent",
@@ -573,6 +603,7 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
     def _initialize_stats(self):
         self.total_upgrade_requests = 0
         self.current_upgrade_requests = 0
+        self.num_writes_to_disk = 0
 
     def _update_rest_api_urls(self):
         self.status_get_url = f"https://console.anyscale-staging.com/api/v2/services-v2/{self.receiver_service_id}"
