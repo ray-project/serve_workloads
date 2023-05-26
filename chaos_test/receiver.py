@@ -130,6 +130,7 @@ class DiskLeaker:
         num_hours, hours = 0.25, 60 * 60
         while True:
             self.write_file()
+            self.num_writes_to_disk  += 1
             print(f"Waiting {num_hours} hours before writing again.")
             await asyncio.sleep(0.25 * hours)
 
