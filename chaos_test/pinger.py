@@ -17,8 +17,8 @@ from chaos_test.constants import (
     DISK_LEAKER_KEY,
     KillOptions,
 )
-from chaos_test.metrics_utils import StringGauge
-from chaos_test.deployment_utils import BaseReconfigurableDeployment
+from utilities.metrics_utils import StringGauge
+from utilities.deployment_utils import BaseReconfigurableDeployment
 
 from ray import serve
 from ray.util.metrics import Counter, Gauge
