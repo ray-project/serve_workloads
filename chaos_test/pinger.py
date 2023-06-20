@@ -625,8 +625,10 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
             print(f"Got exception when getting Receiver service's status: {repr(e)}")
 
     def _parse_receiver_config_template(self) -> Dict:
-        cur_dir = Path(__file__).parent
-        with open(f"{cur_dir}/{RECEIVER_CONFIG_FILENAME}") as f:
+        cur_dir = str(Path(__file__).parent)
+        aliased_path_prefix = "/tmp/ray/session_latest/runtime_resources"
+        aliased_dir = aliased_path_prefix + cur_dir.split("runtime_resources")[1]
+        with open(f"{aliased_dir}/{RECEIVER_CONFIG_FILENAME}") as f:
             receiver_config_template = yaml.safe_load(f)
 
         return receiver_config_template
