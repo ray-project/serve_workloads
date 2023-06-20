@@ -21,7 +21,10 @@ deployments:
   user_config:
     receiver_url: YOUR_RECEIVER_URL
     receiver_bearer_token: YOUR_RECEIVER_BEARER_TOKEN
-    max_qps: 100
+    receiver_max_qps: 100
+    pinger_url: YOUR_PINGER_URL
+    pinger_bearer_token: YOUR_PINGER_BEARER_TOKEN
+    pinger_max_qps: 100
   ray_actor_options:
     num_cpus: 0
 - name: Reaper

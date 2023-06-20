@@ -4,9 +4,10 @@ import yaml
 import asyncio
 import requests
 import itertools
-from typing import Dict
 from pathlib import Path
 from fastapi import FastAPI
+from typing import Dict, Set, Optional, List
+
 import aiohttp
 from aiohttp import TraceConfig
 from aiohttp_retry import RetryClient, ExponentialRetry
@@ -97,7 +98,10 @@ class Router:
 PINGER_OPTIONS = {
     "receiver_url": str,
     "receiver_bearer_token": str,
-    "max_qps": int,
+    "receiver_max_qps": int,
+    "pinger_url": str,
+    "pinger_bearer_token": str,
+    "pinger_max_qps": int,
 }
 
 
@@ -109,30 +113,40 @@ PINGER_OPTIONS = {
 class Pinger(BaseReconfigurableDeployment):
     def __init__(self):
         super().__init__(PINGER_OPTIONS)
-        self.request_loop_task = None
+        self.tasks = []
         self._initialize_stats()
         self._initialize_metrics()
         self.client = self._create_http_client()
-        self.pending_requests = set()
+        self.pending_receiver_requests = set()
+        self.pending_pinger_requests = set()
 
     def reconfigure(self, config: Dict):
         super().reconfigure(config)
         self.stop()
         self.start()
 
-    async def run_request_loop(self):
-        await self._drain_requests()
-        send_interval_s = 1 / self.max_qps
+    async def run_request_loop(
+        self,
+        pending_request_set: Set,
+        target_tag: str,
+        target_url: str,
+        target_bearer_token: str,
+        max_qps: int,
+        payload: Optional[Dict] = None,
+    ):
+        await self._drain_requests(pending_request_sets=[pending_request_set])
+        send_interval_s = 1 / max_qps
+        metric_tags = {"class": "Pinger", "target": target_tag}
 
         while True:
-            json_payload = {NODE_KILLER_KEY: KillOptions.SPARE}
+            json_payload = payload
 
             start_time = asyncio.get_event_loop().time()
 
-            self.pending_requests.add(
+            self.pending_receiver_requests.add(
                 self.client.post(
-                    self.receiver_url,
-                    headers={"Authorization": f"Bearer {self.receiver_bearer_token}"},
+                    target_url,
+                    headers={"Authorization": f"Bearer {target_bearer_token}"},
                     json=json_payload,
                     timeout=10,
                 )
@@ -141,28 +155,28 @@ class Pinger(BaseReconfigurableDeployment):
             # Spend half the send interval waiting for pending requests.
             # Spend the rest on processing the responses.
             done, pending = await asyncio.wait(
-                self.pending_requests, timeout=send_interval_s / 2
+                pending_request_set, timeout=send_interval_s / 2
             )
-            self.pending_requests = pending
-            self.num_pending_requests = len(self.pending_requests)
-            self.pending_requests_gauge.set(len(self.pending_requests))
+            pending_request_set = pending
+            self.num_pending_requests = len(pending_request_set)
+            self.pending_requests_gauge.set(len(pending_request_set), tags=metric_tags)
 
             for task in done:
                 try:
                     response = await task
                     status_code = response.status
                 except asyncio.TimeoutError as e:
-                    self.request_timeout_error_counter.inc()
+                    self.request_timeout_error_counter.inc(tags=metric_tags)
                     self._count_failed_request(-2, reason="TimeoutError")
-                    self.fail_counter.inc()
+                    self.fail_counter.inc(tags=metric_tags)
                     print(
                         f"{time.strftime('%b %d -- %l:%M%p: ')}"
                         f"Got exception: \n{repr(e)}"
                     )
                 except Exception as e:
                     self._count_failed_request(-1, reason=repr(e))
-                    self._increment_error_counter(-1)
-                    self.fail_counter.inc()
+                    self._increment_error_counter(-1, tags=metric_tags)
+                    self.fail_counter.inc(tags=metric_tags)
                     print(
                         f"{time.strftime('%b %d -- %l:%M%p: ')}"
                         f"Got exception: \n{repr(e)}"
@@ -170,18 +184,18 @@ class Pinger(BaseReconfigurableDeployment):
                 else:
                     if status_code == 200:
                         self._count_successful_request()
-                        self.success_counter.inc()
+                        self.success_counter.inc(tags=metric_tags)
                     else:
                         self._count_failed_request(
                             status_code, reason=(await response.text())
                         )
-                        self.fail_counter.inc()
-                        self._increment_error_counter(status_code)
-                if self.current_num_requests % (self.max_qps * 10) == 0:
+                        self.fail_counter.inc(tags=metric_tags)
+                        self._increment_error_counter(status_code, tags=metric_tags)
+                if self.current_num_requests % (max_qps * 10) == 0:
                     print(
                         f"{time.strftime('%b %d -- %l:%M%p: ')}"
                         f"Sent {self.current_num_requests} "
-                        f'requests to "{self.receiver_url}".'
+                        f'requests to "{target_url}".'
                     )
 
             send_interval_remaining_s = send_interval_s - (
@@ -191,25 +205,52 @@ class Pinger(BaseReconfigurableDeployment):
                 await asyncio.sleep(send_interval_remaining_s)
 
     def start(self):
-        if self.request_loop_task is not None:
+        task_methods = [
+            (
+                self.run_request_loop,
+                {
+                    "pending_request_set": self.pending_receiver_requests,
+                    "target_tag": "receiver",
+                    "target_url": self.receiver_url,
+                    "target_bearer_token": self.receiver_bearer_token,
+                    "max_qps": self.receiver_max_qps,
+                    "payload": {NODE_KILLER_KEY: KillOptions.SPARE},
+                },
+            ),
+            (
+                self.run_request_loop,
+                {
+                    "pending_request_set": self.pending_pinger_requests,
+                    "target_tag": "pinger",
+                    "target_url": self.pinger_url,
+                    "target_bearer_token": self.pinger_bearer_token,
+                    "max_qps": self.pinger_max_qps,
+                    "payload": None,
+                },
+            ),
+        ]
+        if len(self.tasks) > 0:
             print("Called start() while Pinger is already running. Nothing changed.")
         else:
-            self.request_loop_task = run_background_task(self.run_request_loop())
+            for method, kwargs in task_methods:
+                self.tasks.append(run_background_task(method(**kwargs)))
             print("Started Pinger. Call stop() to stop.")
 
     async def stop(self):
-        if self.request_loop_task is not None:
-            self.request_loop_task.cancel()
-            self.request_loop_task = None
+        if len(self.tasks) == 0:
+            print("Called stop() while Pinger was already stopped. Nothing changed.")
+        else:
+            for task in self.tasks:
+                task.cancel()
+
+            self.tasks.clear()
             await self._drain_requests()
             print("Stopped Pinger. Call start() to start.")
-        else:
-            print("Called stop() while Pinger was already stopped. Nothing changed.")
         self._reset_current_counters()
 
     def get_info(self):
         info = {
-            "Pinger running": self.request_loop_task is not None,
+            "Pinger running": len(self.tasks) > 0,
             "Target URL": self.receiver_url,
             "Total number of requests": self.total_num_requests,
             "Total successful requests": self.total_successful_requests,
@@ -244,31 +285,31 @@ class Pinger(BaseReconfigurableDeployment):
         self.request_counter = Counter(
             "pinger_num_requests",
             description="Number of requests.",
-            tag_keys=("class",),
+            tag_keys=("class", "target"),
         ).set_default_tags({"class": "Pinger"})
 
         self.success_counter = Counter(
             "pinger_num_requests_succeeded",
             description="Number of successful requests.",
-            tag_keys=("class",),
+            tag_keys=("class", "target"),
         ).set_default_tags({"class": "Pinger"})
 
         self.fail_counter = Counter(
             "pinger_num_requests_failed",
             description="Number of failed requests.",
-            tag_keys=("class",),
+            tag_keys=("class", "target"),
         ).set_default_tags({"class": "Pinger"})
 
         self.latency_gauge = Gauge(
             "pinger_request_latency",
             description="Latency of last successful request.",
-            tag_keys=("class",),
+            tag_keys=("class", "target"),
         ).set_default_tags({"class": "Pinger"})
 
         self.pending_requests_gauge = Gauge(
             "pinger_pending_requests",
             description="Number of requests being processed by the Receiver.",
-            tag_keys=("class",),
+            tag_keys=("class", "target"),
         ).set_default_tags({"class": "Pinger"})
 
         self.http_error_counters = dict()
@@ -277,28 +318,28 @@ class Pinger(BaseReconfigurableDeployment):
             self.http_error_counters[error_code] = Counter(
                 f"pinger_{error_code}_http_error",
                 description=f"Number of {error_code} HTTP response errors received.",
-                tag_keys=("class",),
+                tag_keys=("class", "target"),
             ).set_default_tags({"class": "Pinger"})
 
         self.request_timeout_error_counter = Counter(
             "pinger_num_request_timeout",
             description="Number of requests that timed out after retries.",
-            tag_keys=("class",),
+            tag_keys=("class", "target"),
         ).set_default_tags({"class": "Pinger"})
 
         self.http_error_fallback_counter = Counter(
             "pinger_fallback_http_error",
             description="Number of any other errors when processing responses.",
-            tag_keys=("class",),
+            tag_keys=("class", "target"),
         ).set_default_tags({"class": "Pinger"})
 
-    def _increment_error_counter(self, status_code: int):
+    def _increment_error_counter(self, status_code: int, tags: Dict[str, str]):
         """Increments the error counter corresponding to the status_code."""
 
         if status_code in self.http_error_counters:
-            self.http_error_counters[status_code].inc()
+            self.http_error_counters[status_code].inc(tags=tags)
         else:
-            self.http_error_fallback_counter.inc()
+            self.http_error_fallback_counter.inc(tags=tags)
 
     def _count_successful_request(self):
         self.total_num_requests += 1
@@ -344,9 +385,15 @@ class Pinger(BaseReconfigurableDeployment):
             trace_configs=[trace_config],
         )
 
-    async def _drain_requests(self):
-        await asyncio.gather(*self.pending_requests)
-        self.pending_requests.clear()
+    async def _drain_requests(self, pending_request_sets: Optional[List[Set]] = None):
+        if pending_request_sets is None:
+            pending_request_sets = [
+                self.pending_receiver_requests,
+                self.pending_pinger_requests,
+            ]
+        for pending_request_set in pending_request_sets:
+            await asyncio.gather(*pending_request_set)
+            pending_request_set.clear()
 
 
 REAPER_OPTIONS = {
