@@ -205,7 +205,7 @@ class Pinger(BaseReconfigurableDeployment):
                             f"{time.strftime('%b %d -- %l:%M%p: ')}"
                             f"Got failed request: \n{response_text}"
                         )
-                        self._count_failed_request(status_code, reason=())
+                        self._count_failed_request(status_code, reason=response_text)
                         self.fail_counter.inc(tags=metric_tags)
                         self._increment_error_counter(status_code, tags=metric_tags)
 
