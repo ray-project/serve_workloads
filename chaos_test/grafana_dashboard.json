@@ -17,7 +17,7 @@
   "gnetId": null,
   "graphTooltip": 0,
   "id": 47789,
-  "iteration": 1687987284234,
+  "iteration": 1687990355228,
   "links": [],
   "panels": [
     {
@@ -1393,7 +1393,7 @@
         },
         {
           "exemplar": true,
-          "expr": "ray_pinger_pending_requests{ClusterId=~\"$ClusterId\"}",
+          "expr": "ray_pinger_pending_requests{ClusterId=~\"$ClusterId\", target=~\"$Target\"}",
           "hide": false,
           "interval": "",
           "legendFormat": "Number of pending requests",
@@ -2260,7 +2260,7 @@
     "list": [
       {
         "current": {
-          "selected": true,
+          "selected": false,
           "text": ".*",
           "value": ".*"
         },
@@ -2319,12 +2319,12 @@
     ]
   },
   "time": {
-    "from": "now-1h",
+    "from": "now-5m",
     "to": "now"
   },
   "timepicker": {},
   "timezone": "",
   "title": "Ray Serve Chaos Test",
   "uid": "pCWbEAE4k",
-  "version": 1
+  "version": 2
 }
