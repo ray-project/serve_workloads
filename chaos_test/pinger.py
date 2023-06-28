@@ -186,7 +186,7 @@ class Pinger(BaseReconfigurableDeployment):
                         self.fail_counter.inc(tags=metric_tags)
                         print(
                             f"{time.strftime('%b %d -- %l:%M%p: ')}"
-                            f"Got exception: \n{repr(e)}"
+                            f"Got exception from request: \n{repr(e)}"
                         )
                     except Exception as e:
                         self._count_failed_request(-1, reason=repr(e))
@@ -194,18 +194,21 @@ class Pinger(BaseReconfigurableDeployment):
                         self.fail_counter.inc(tags=metric_tags)
                         print(
                             f"{time.strftime('%b %d -- %l:%M%p: ')}"
-                            f"Got exception: \n{repr(e)}"
+                            f"Got exception from request: \n{repr(e)}"
                         )
+                    if status_code == 200:
+                        self._count_successful_request()
+                        self.success_counter.inc(tags=metric_tags)
                     else:
-                        if status_code == 200:
-                            self._count_successful_request()
-                            self.success_counter.inc(tags=metric_tags)
-                        else:
-                            self._count_failed_request(
-                                status_code, reason=(await response.text())
-                            )
-                            self.fail_counter.inc(tags=metric_tags)
-                            self._increment_error_counter(status_code, tags=metric_tags)
+                        response_text = await response.text()
+                        print(
+                            f"{time.strftime('%b %d -- %l:%M%p: ')}"
+                            f"Got failed request: \n{response_text}"
+                        )
+                        self._count_failed_request(status_code, reason=())
+                        self.fail_counter.inc(tags=metric_tags)
+                        self._increment_error_counter(status_code, tags=metric_tags)
+
                     if self.current_num_requests % (max_qps * 10) == 0:
                         print(
                             f"{time.strftime('%b %d -- %l:%M%p: ')}"
