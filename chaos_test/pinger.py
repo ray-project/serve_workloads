@@ -1,3 +1,4 @@
+import sys
 import time
 import json
 import yaml
@@ -146,7 +147,7 @@ class Pinger(BaseReconfigurableDeployment):
 
                 start_time = asyncio.get_event_loop().time()
 
-                self.pending_receiver_requests.add(
+                pending_request_set.add(
                     client.post(
                         target_url,
                         headers={"Authorization": f"Bearer {target_bearer_token}"},
@@ -213,7 +214,7 @@ class Pinger(BaseReconfigurableDeployment):
                 f"{time.strftime('%b %d -- %l:%M%p: ')}"
                 f"run_request_loop for target_url {target_url} crashed."
             )
-            traceback.print_exc()
+            traceback.print_exc(file=sys.stdout)
 
     def start(self):
         task_methods = [
