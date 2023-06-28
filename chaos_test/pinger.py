@@ -34,8 +34,9 @@ app = FastAPI()
 @serve.deployment(num_replicas=1, ray_actor_options={"num_cpus": 0})
 @serve.ingress(app)
 class Router:
-    def __init__(self, pinger_handle, reaper_handle, helmsman_handle):
-        self.pinger = pinger_handle
+    def __init__(self, pinger_handle1, pinger_handle2, reaper_handle, helmsman_handle):
+        self.pinger1 = pinger_handle1
+        self.pinger2 = pinger_handle2
         self.reaper = reaper_handle
         self.helmsman = helmsman_handle
 
@@ -52,8 +53,9 @@ class Router:
 
     @app.get("/start-pinger")
     async def start_pinger(self) -> str:
-        await (await self.pinger.start.remote())
-        return "Started Pinger!"
+        await (await self.pinger1.start.remote())
+        await (await self.pinger2.start.remote())
+        return "Started Pingers!"
 
     @app.get("/start-reaper")
     async def start_reaper(self) -> str:
@@ -74,8 +76,9 @@ class Router:
 
     @app.get("/stop-pinger")
     async def stop_pinger(self) -> str:
-        await (await self.pinger.stop.remote())
-        return "Stopped Pinger!"
+        await (await self.pinger1.stop.remote())
+        await (await self.pinger2.stop.remote())
+        return "Stopped Pingers!"
 
     @app.get("/stop-reaper")
     async def stop_reaper(self) -> str:
@@ -89,7 +92,7 @@ class Router:
 
     @app.get("/info")
     async def get_info(self):
-        pinger_info = (await (await self.pinger.get_info.remote())).copy()
+        pinger_info = (await (await self.pinger1.get_info.remote())).copy()
         reaper_info = (await (await self.reaper.get_info.remote())).copy()
         helmsman_info = (await (await self.helmsman.get_info.remote())).copy()
         pinger_info.update(reaper_info)
@@ -98,12 +101,9 @@ class Router:
 
 
 PINGER_OPTIONS = {
-    "receiver_url": str,
-    "receiver_bearer_token": str,
-    "receiver_max_qps": int,
-    "pinger_url": str,
-    "pinger_bearer_token": str,
-    "pinger_max_qps": int,
+    "url": str,
+    "bearer_token": str,
+    "max_qps": int,
 }
 
 
@@ -113,13 +113,18 @@ PINGER_OPTIONS = {
     ray_actor_options={"num_cpus": 0},
 )
 class Pinger(BaseReconfigurableDeployment):
-    def __init__(self):
+    def __init__(
+        self,
+        target_tag: str,
+        payload: Dict,
+    ):
         super().__init__(PINGER_OPTIONS)
+        self.target_tag = target_tag
+        self.payload = payload
         self.tasks = []
         self._initialize_stats()
         self._initialize_metrics()
-        self.pending_receiver_requests = set()
-        self.pending_pinger_requests = set()
+        self.pending_requests = set()
 
     def reconfigure(self, config: Dict):
         super().reconfigure(config)
@@ -221,26 +226,39 @@ class Pinger(BaseReconfigurableDeployment):
             (
                 self.run_request_loop,
                 {
-                    "pending_request_set": self.pending_receiver_requests,
-                    "target_tag": "receiver",
-                    "target_url": self.receiver_url,
-                    "target_bearer_token": self.receiver_bearer_token,
-                    "max_qps": self.receiver_max_qps,
-                    "payload": {NODE_KILLER_KEY: KillOptions.SPARE},
+                    "pending_request_set": self.pending_requests,
+                    "target_tag": self.target_tag,
+                    "target_url": self.url,
+                    "target_bearer_token": self.bearer_token,
+                    "max_qps": self.max_qps,
+                    "payload": self.payload,
                 },
-            ),
-            (
-                self.run_request_loop,
-                {
-                    "pending_request_set": self.pending_pinger_requests,
-                    "target_tag": "pinger",
-                    "target_url": self.pinger_url,
-                    "target_bearer_token": self.pinger_bearer_token,
-                    "max_qps": self.pinger_max_qps,
-                    "payload": None,
-                },
-            ),
+            )
         ]
+        # task_methods = [
+        #     (
+        #         self.run_request_loop,
+        #         {
+        #             "pending_request_set": self.pending_receiver_requests,
+        #             "target_tag": "receiver",
+        #             "target_url": self.receiver_url,
+        #             "target_bearer_token": self.receiver_bearer_token,
+        #             "max_qps": self.receiver_max_qps,
+        #             "payload": {NODE_KILLER_KEY: KillOptions.SPARE},
+        #         },
+        #     ),
+        #     (
+        #         self.run_request_loop,
+        #         {
+        #             "pending_request_set": self.pending_pinger_requests,
+        #             "target_tag": "pinger",
+        #             "target_url": self.pinger_url,
+        #             "target_bearer_token": self.pinger_bearer_token,
+        #             "max_qps": self.pinger_max_qps,
+        #             "payload": None,
+        #         },
+        #     ),
+        # ]
         if len(self.tasks) > 0:
             print("Called start() while Pinger is already running. Nothing changed.")
         else:
@@ -399,10 +417,7 @@ class Pinger(BaseReconfigurableDeployment):
 
     async def _drain_requests(self, pending_request_sets: Optional[List[Set]] = None):
         if pending_request_sets is None:
-            pending_request_sets = [
-                self.pending_receiver_requests,
-                self.pending_pinger_requests,
-            ]
+            pending_request_sets = [self.pending_requests]
         for pending_request_set in pending_request_sets:
             await asyncio.gather(*pending_request_set)
             pending_request_set.clear()
@@ -760,4 +775,11 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
             )
 
 
-graph = Router.bind(Pinger.bind(), Reaper.bind(), ReceiverHelmsman.bind())
+graph = Router.bind(
+    Pinger.options(name="receiver_Pinger").bind(
+        target_tag="Receiver", payload={NODE_KILLER_KEY: KillOptions.SPARE}
+    ),
+    Pinger.options(name="self_Pinger").bind(target_tag="self", payload=None),
+    Reaper.bind(),
+    ReceiverHelmsman.bind(),
+)
