@@ -16,15 +16,20 @@ deployments:
   num_replicas: 1
   ray_actor_options:
     num_cpus: 0
-- name: Pinger
+- name: receiver_Pinger
   num_replicas: 1
   user_config:
-    receiver_url: YOUR_RECEIVER_URL
-    receiver_bearer_token: YOUR_RECEIVER_BEARER_TOKEN
-    receiver_max_qps: 100
-    pinger_url: YOUR_PINGER_URL
-    pinger_bearer_token: YOUR_PINGER_BEARER_TOKEN
-    pinger_max_qps: 100
+    url: YOUR_RECEIVER_URL
+    bearer_token: YOUR_RECEIVER_BEARER_TOKEN
+    max_qps: 100
+  ray_actor_options:
+    num_cpus: 0
+- name: self_Pinger
+  num_replicas: 1
+  user_config:
+    url: YOUR_PINGER_URL
+    bearer_token: YOUR_PINGER_BEARER_TOKEN
+    max_qps: 100
   ray_actor_options:
     num_cpus: 0
 - name: Reaper
