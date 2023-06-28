@@ -92,12 +92,14 @@ class Router:
 
     @app.get("/info")
     async def get_info(self):
-        pinger_info = (await (await self.pinger1.get_info.remote())).copy()
+        info = {}
+        info["pinger1"] = (await (await self.pinger1.get_info.remote())).copy()
+        info["pinger2"] = (await (await self.pinger2.get_info.remote())).copy()
         reaper_info = (await (await self.reaper.get_info.remote())).copy()
         helmsman_info = (await (await self.helmsman.get_info.remote())).copy()
-        pinger_info.update(reaper_info)
-        pinger_info.update(helmsman_info)
-        return pinger_info
+        info.update(reaper_info)
+        info.update(helmsman_info)
+        return info
 
 
 PINGER_OPTIONS = {
