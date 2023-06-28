@@ -116,7 +116,6 @@ class Pinger(BaseReconfigurableDeployment):
         self.tasks = []
         self._initialize_stats()
         self._initialize_metrics()
-        self.client = self._create_http_client()
         self.pending_receiver_requests = set()
         self.pending_pinger_requests = set()
 
@@ -138,13 +137,15 @@ class Pinger(BaseReconfigurableDeployment):
         send_interval_s = 1 / max_qps
         metric_tags = {"class": "Pinger", "target": target_tag}
 
+        client = self._create_http_client(metric_tags)
+
         while True:
             json_payload = payload
 
             start_time = asyncio.get_event_loop().time()
 
             self.pending_receiver_requests.add(
-                self.client.post(
+                client.post(
                     target_url,
                     headers={"Authorization": f"Bearer {target_bearer_token}"},
                     json=json_payload,
@@ -360,16 +361,16 @@ class Pinger(BaseReconfigurableDeployment):
         else:
             self.failed_response_reasons[status_code] = set([reason])
 
-    def _create_http_client(self):
+    def _create_http_client(self, metric_tags: Dict):
 
         # From https://stackoverflow.com/a/63925153
         async def on_request_start(session, trace_config_ctx, params):
-            self.request_counter.inc()
+            self.request_counter.inc(metric_tags)
             trace_config_ctx.start = asyncio.get_event_loop().time()
 
         async def on_request_end(session, trace_config_ctx, params):
             latency = asyncio.get_event_loop().time() - trace_config_ctx.start
-            self.latency_gauge.set(latency)
+            self.latency_gauge.set(latency, tags=metric_tags)
 
         trace_config = TraceConfig()
         trace_config.on_request_start.append(on_request_start)
