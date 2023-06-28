@@ -120,7 +120,7 @@ class DiskLeaker:
     async def write_file(self):
         """Writes 1 GB of data over a period of time."""
 
-        num_GB, GB = 1, (1024 * 1024 * 1024)
+        num_GB, GB = 10, (1024 * 1024 * 1024)
         time_period_m = 15
         timestamp = "{:%Y-%m-%d-%H-%M-%S-%f-%p}".format(datetime.now())
         filename = f"{timestamp}-{self.leak_file_name}"
@@ -140,7 +140,7 @@ class DiskLeaker:
             await asyncio.sleep(max(0, 60 - write_duration_s))
 
     async def leak(self):
-        num_hours, hours = 1, 60 * 60
+        num_hours, hours = 0.5, 60 * 60
         while True:
             file_write_start_time = time.time()
             await self.write_file()
@@ -148,7 +148,7 @@ class DiskLeaker:
             self.num_writes_to_disk += 1
             sleep_time = max(0, num_hours * hours - file_write_duration_s)
             print(f"Waiting {(sleep_time / hours):.2f} hours before writing again.")
-            await asyncio.sleep()
+            await asyncio.sleep(sleep_time)
 
 
 alpha = Receiver.bind("Alpha", NodeKiller.bind(), DiskLeaker.bind())
