@@ -3,7 +3,7 @@
 import_path: chaos_test.pinger:graph
 
 runtime_env:
-  working_dir: https://github.com/ray-project/serve_workloads/archive/c568035d0ece8f245ad6a9689fe265ad2158f5d3.zip
+  working_dir: https://github.com/ray-project/serve_workloads/archive/3dfa2118f355418dfbd5cfe8626d501ba42b9a67.zip
   env_vars:
     RAY_SERVE_REQUEST_PROCESSING_TIMEOUT_S: '1'
 
