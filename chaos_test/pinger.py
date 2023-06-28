@@ -252,7 +252,7 @@ class Pinger(BaseReconfigurableDeployment):
 
     def get_info(self):
         info = {
-            "Pinger running": len(self.tasks) > 0,
+            "Pinger running": self.run_request_loop_task is not None,
             "Target URL": self.url,
             "Total number of requests": self.total_num_requests,
             "Total successful requests": self.total_successful_requests,
