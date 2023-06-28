@@ -245,9 +245,7 @@ class Pinger(BaseReconfigurableDeployment):
             print("Called start() while Pinger is already running. Nothing changed.")
         else:
             for method, kwargs in task_methods:
-                self.tasks.append(
-                    asyncio.new_event_loop().create_task(method(**kwargs))
-                )
+                self.tasks.append(run_background_task(method(**kwargs)))
             print("Started Pinger. Call stop() to stop.")
 
     async def stop(self):
