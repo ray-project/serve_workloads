@@ -133,77 +133,86 @@ class Pinger(BaseReconfigurableDeployment):
         max_qps: int,
         payload: Optional[Dict] = None,
     ):
-        await self._drain_requests(pending_request_sets=[pending_request_set])
-        send_interval_s = 1 / max_qps
-        metric_tags = {"class": "Pinger", "target": target_tag}
+        try:
+            await self._drain_requests(pending_request_sets=[pending_request_set])
+            send_interval_s = 1 / max_qps
+            metric_tags = {"class": "Pinger", "target": target_tag}
 
-        client = self._create_http_client(metric_tags)
+            client = self._create_http_client(metric_tags)
 
-        while True:
-            json_payload = payload
+            while True:
+                json_payload = payload
 
-            start_time = asyncio.get_event_loop().time()
+                start_time = asyncio.get_event_loop().time()
 
-            self.pending_receiver_requests.add(
-                client.post(
-                    target_url,
-                    headers={"Authorization": f"Bearer {target_bearer_token}"},
-                    json=json_payload,
-                    timeout=10,
+                self.pending_receiver_requests.add(
+                    client.post(
+                        target_url,
+                        headers={"Authorization": f"Bearer {target_bearer_token}"},
+                        json=json_payload,
+                        timeout=10,
+                    )
                 )
-            )
 
-            # Spend half the send interval waiting for pending requests.
-            # Spend the rest on processing the responses.
-            done, pending = await asyncio.wait(
-                pending_request_set, timeout=send_interval_s / 2
-            )
-            pending_request_set = pending
-            self.num_pending_requests = len(pending_request_set)
-            self.pending_requests_gauge.set(len(pending_request_set), tags=metric_tags)
+                # Spend half the send interval waiting for pending requests.
+                # Spend the rest on processing the responses.
+                done, pending = await asyncio.wait(
+                    pending_request_set, timeout=send_interval_s / 2
+                )
+                pending_request_set = pending
+                self.num_pending_requests = len(pending_request_set)
+                self.pending_requests_gauge.set(
+                    len(pending_request_set), tags=metric_tags
+                )
 
-            for task in done:
-                try:
-                    response = await task
-                    status_code = response.status
-                except asyncio.TimeoutError as e:
-                    self.request_timeout_error_counter.inc(tags=metric_tags)
-                    self._count_failed_request(-2, reason="TimeoutError")
-                    self.fail_counter.inc(tags=metric_tags)
-                    print(
-                        f"{time.strftime('%b %d -- %l:%M%p: ')}"
-                        f"Got exception: \n{repr(e)}"
-                    )
-                except Exception as e:
-                    self._count_failed_request(-1, reason=repr(e))
-                    self._increment_error_counter(-1, tags=metric_tags)
-                    self.fail_counter.inc(tags=metric_tags)
-                    print(
-                        f"{time.strftime('%b %d -- %l:%M%p: ')}"
-                        f"Got exception: \n{repr(e)}"
-                    )
-                else:
-                    if status_code == 200:
-                        self._count_successful_request()
-                        self.success_counter.inc(tags=metric_tags)
-                    else:
-                        self._count_failed_request(
-                            status_code, reason=(await response.text())
-                        )
+                for task in done:
+                    try:
+                        response = await task
+                        status_code = response.status
+                    except asyncio.TimeoutError as e:
+                        self.request_timeout_error_counter.inc(tags=metric_tags)
+                        self._count_failed_request(-2, reason="TimeoutError")
                         self.fail_counter.inc(tags=metric_tags)
-                        self._increment_error_counter(status_code, tags=metric_tags)
-                if self.current_num_requests % (max_qps * 10) == 0:
-                    print(
-                        f"{time.strftime('%b %d -- %l:%M%p: ')}"
-                        f"Sent {self.current_num_requests} "
-                        f'requests to "{target_url}".'
-                    )
+                        print(
+                            f"{time.strftime('%b %d -- %l:%M%p: ')}"
+                            f"Got exception: \n{repr(e)}"
+                        )
+                    except Exception as e:
+                        self._count_failed_request(-1, reason=repr(e))
+                        self._increment_error_counter(-1, tags=metric_tags)
+                        self.fail_counter.inc(tags=metric_tags)
+                        print(
+                            f"{time.strftime('%b %d -- %l:%M%p: ')}"
+                            f"Got exception: \n{repr(e)}"
+                        )
+                    else:
+                        if status_code == 200:
+                            self._count_successful_request()
+                            self.success_counter.inc(tags=metric_tags)
+                        else:
+                            self._count_failed_request(
+                                status_code, reason=(await response.text())
+                            )
+                            self.fail_counter.inc(tags=metric_tags)
+                            self._increment_error_counter(status_code, tags=metric_tags)
+                    if self.current_num_requests % (max_qps * 10) == 0:
+                        print(
+                            f"{time.strftime('%b %d -- %l:%M%p: ')}"
+                            f"Sent {self.current_num_requests} "
+                            f'requests to "{target_url}".'
+                        )
 
-            send_interval_remaining_s = send_interval_s - (
-                asyncio.get_event_loop().time() - start_time
+                send_interval_remaining_s = send_interval_s - (
+                    asyncio.get_event_loop().time() - start_time
+                )
+                if send_interval_remaining_s > 0:
+                    await asyncio.sleep(send_interval_remaining_s)
+        except Exception as e:
+            print(
+                f"{time.strftime('%b %d -- %l:%M%p: ')}"
+                f"run_request_loop for target_url {target_url} crashed with "
+                f"exception: \n{repr(e)}"
             )
-            if send_interval_remaining_s > 0:
-                await asyncio.sleep(send_interval_remaining_s)
 
     def start(self):
         task_methods = [
