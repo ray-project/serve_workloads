@@ -1,7 +1,6 @@
 import os
 import json
 import time
-import shutil
 import asyncio
 import subprocess
 from datetime import datetime
@@ -109,9 +108,7 @@ class DiskLeaker:
         self.leak_dir = "/tmp/disk_leaker_files/"
         self.leak_file_name = "leak_file.log"
         self.num_writes_to_disk = 0
-        if os.path.isdir(self.leak_dir):
-            shutil.rmtree(self.leak_dir)
-        os.mkdir(self.leak_dir)
+        os.makedirs(self.leak_dir, exist_ok=True)
         run_background_task(self.leak())
 
     def info(self):
