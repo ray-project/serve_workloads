@@ -1,7 +1,7 @@
 import_path: single_node_test.receiver:graph
 
 runtime_env:
-  working_dir: https://github.com/ray-project/serve_workloads/archive/4d2c104afc68ff854078b796c16082b9807a18d8.zip
+  working_dir: https://github.com/ray-project/serve_workloads/archive/9255dcd3f4a19daf1acd29f0d810ac48c316d543.zip
   env_vars:
     RAY_SERVE_REQUEST_PROCESSING_TIMEOUT_S: '1'
 
