@@ -41,6 +41,7 @@ class Router:
         self.helmsman = helmsman_handle
 
     @app.get("/")
+    @app.post("/")
     def root(self) -> str:
         return "Hi there!"
 
