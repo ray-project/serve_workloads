@@ -34,9 +34,8 @@ app = FastAPI()
 @serve.deployment(num_replicas=1, ray_actor_options={"num_cpus": 0})
 @serve.ingress(app)
 class Router:
-    def __init__(self, pinger_handle1, pinger_handle2, reaper_handle, helmsman_handle):
-        self.pinger1 = pinger_handle1
-        self.pinger2 = pinger_handle2
+    def __init__(self, pinger_handles, reaper_handle, helmsman_handle):
+        self.pinger_handles = pinger_handles
         self.reaper = reaper_handle
         self.helmsman = helmsman_handle
 
@@ -47,15 +46,15 @@ class Router:
 
     @app.get("/start")
     async def start(self):
-        await self.start_pinger()
+        await self.start_pingers()
         await self.start_reaper()
         await self.start_helmsman()
         return "Started deployment loops!"
 
-    @app.get("/start-pinger")
-    async def start_pinger(self) -> str:
-        await (await self.pinger1.start.remote())
-        await (await self.pinger2.start.remote())
+    @app.get("/start-pingers")
+    async def start_pingers(self) -> str:
+        for pinger_handle in self.pinger_handles:
+            await (await pinger_handle.start.remote())
         return "Started Pingers!"
 
     @app.get("/start-reaper")
@@ -70,15 +69,15 @@ class Router:
 
     @app.get("/stop")
     async def stop(self):
-        await self.stop_pinger()
+        await self.stop_pingers()
         await self.stop_reaper()
         await self.stop_helmsman()
         return "Stopped deployment loops!"
 
-    @app.get("/stop-pinger")
-    async def stop_pinger(self) -> str:
-        await (await self.pinger1.stop.remote())
-        await (await self.pinger2.stop.remote())
+    @app.get("/stop-pingers")
+    async def stop_pingers(self) -> str:
+        for pinger_handle in self.pinger_handles:
+            await (await pinger_handle.stop.remote())
         return "Stopped Pingers!"
 
     @app.get("/stop-reaper")
@@ -94,8 +93,10 @@ class Router:
     @app.get("/info")
     async def get_info(self):
         info = {}
-        info["pinger1"] = (await (await self.pinger1.get_info.remote())).copy()
-        info["pinger2"] = (await (await self.pinger2.get_info.remote())).copy()
+        for i in range(self.pinger_handles):
+            info[f"pinger_{i}"] = (
+                await (await self.pinger_handles[i].get_info.remote())
+            ).copy()
         reaper_info = (await (await self.reaper.get_info.remote())).copy()
         helmsman_info = (await (await self.helmsman.get_info.remote())).copy()
         info.update(reaper_info)
@@ -124,7 +125,7 @@ class Pinger(BaseReconfigurableDeployment):
         super().__init__(PINGER_OPTIONS)
         self.target_tag = target_tag
         self.payload = payload
-        self.tasks = []
+        self.run_request_loop_task = None
         self._initialize_stats()
         self._initialize_metrics()
         self.pending_requests = set()
@@ -144,7 +145,7 @@ class Pinger(BaseReconfigurableDeployment):
         payload: Optional[Dict] = None,
     ):
         try:
-            await self._drain_requests(pending_request_sets=[pending_request_set])
+            await self._drain_requests()
             send_interval_s = 1 / max_qps
             metric_tags = {"class": "Pinger", "target": target_tag}
 
@@ -225,58 +226,26 @@ class Pinger(BaseReconfigurableDeployment):
             traceback.print_exc(file=sys.stdout)
 
     def start(self):
-        task_methods = [
-            (
-                self.run_request_loop,
-                {
-                    "pending_request_set": self.pending_requests,
-                    "target_tag": self.target_tag,
-                    "target_url": self.url,
-                    "target_bearer_token": self.bearer_token,
-                    "max_qps": self.max_qps,
-                    "payload": self.payload,
-                },
-            )
-        ]
-        # task_methods = [
-        #     (
-        #         self.run_request_loop,
-        #         {
-        #             "pending_request_set": self.pending_receiver_requests,
-        #             "target_tag": "receiver",
-        #             "target_url": self.receiver_url,
-        #             "target_bearer_token": self.receiver_bearer_token,
-        #             "max_qps": self.receiver_max_qps,
-        #             "payload": {NODE_KILLER_KEY: KillOptions.SPARE},
-        #         },
-        #     ),
-        #     (
-        #         self.run_request_loop,
-        #         {
-        #             "pending_request_set": self.pending_pinger_requests,
-        #             "target_tag": "pinger",
-        #             "target_url": self.pinger_url,
-        #             "target_bearer_token": self.pinger_bearer_token,
-        #             "max_qps": self.pinger_max_qps,
-        #             "payload": None,
-        #         },
-        #     ),
-        # ]
-        if len(self.tasks) > 0:
+        if self.run_request_loop_task is not None:
             print("Called start() while Pinger is already running. Nothing changed.")
         else:
-            for method, kwargs in task_methods:
-                self.tasks.append(run_background_task(method(**kwargs)))
+            self.run_request_loop_task = run_background_task(
+                self.run_request_loop(
+                    pending_request_set=self.pending_requests,
+                    target_tag=self.target_tag,
+                    target_url=self.url,
+                    target_bearer_token=self.bearer_token,
+                    max_qps=self.max_qps,
+                    payload=self.payload,
+                )
+            )
             print("Started Pinger. Call stop() to stop.")
 
     async def stop(self):
-        if len(self.tasks) == 0:
+        if self.run_request_loop_task is None:
             print("Called stop() while Pinger was already stopped. Nothing changed.")
         else:
-            for task in self.tasks:
-                task.cancel()
-
-            self.tasks.clear()
+            self.run_request_loop_task.cancel()
             await self._drain_requests()
             print("Stopped Pinger. Call start() to start.")
         self._reset_current_counters()
@@ -419,11 +388,8 @@ class Pinger(BaseReconfigurableDeployment):
         )
 
     async def _drain_requests(self, pending_request_sets: Optional[List[Set]] = None):
-        if pending_request_sets is None:
-            pending_request_sets = [self.pending_requests]
-        for pending_request_set in pending_request_sets:
-            await asyncio.gather(*pending_request_set)
-            pending_request_set.clear()
+        await asyncio.gather(self.pending_requests)
+        self.pending_requests.clear()
 
 
 REAPER_OPTIONS = {
