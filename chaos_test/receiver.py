@@ -1,6 +1,7 @@
 import os
 import json
 import time
+import shutil
 import asyncio
 import subprocess
 from datetime import datetime
@@ -108,31 +109,45 @@ class DiskLeaker:
         self.leak_dir = "/tmp/disk_leaker_files/"
         self.leak_file_name = "leak_file.log"
         self.num_writes_to_disk = 0
+        if os.path.isdir(self.leak_dir):
+            shutil.rmtree(self.leak_dir)
         os.mkdir(self.leak_dir)
         run_background_task(self.leak())
 
     def info(self):
         return self.num_writes_to_disk
 
-    def write_file(self):
+    async def write_file(self):
+        """Writes 1 GB of data over a period of time."""
+
         num_GB, GB = 1, (1024 * 1024 * 1024)
+        time_period_m = 15
         timestamp = "{:%Y-%m-%d-%H-%M-%S-%f-%p}".format(datetime.now())
         filename = f"{timestamp}-{self.leak_file_name}"
 
-        print(
-            f"{time.strftime('%b %d -- %l:%M%p: ')}Writing {num_GB}GB to "
-            f'file "{filename}".'
-        )
-        with open(filename, "w+") as f:
-            f.write("0" * num_GB * GB)
+        for _ in range(time_period_m):
+            write_start_time = time.time()
+            print(
+                f"{time.strftime('%b %d -- %l:%M%p: ')}Writing "
+                f'{num_GB / time_period_m}GB to file "{filename}".'
+            )
+            with open(filename, "w+") as f:
+                f.write("0" * (num_GB / time_period_m) * GB)
+                f.flush()
+                os.fsync()  # Flush doesn't necessarily write to disk. Need fsync.
+            write_duration_s = time.time() - write_start_time
+            await asyncio.sleep(max(0, 60 - write_duration_s))
 
     async def leak(self):
-        num_hours, hours = 0.25, 60 * 60
+        num_hours, hours = 1, 60 * 60
         while True:
-            self.write_file()
-            self.num_writes_to_disk  += 1
-            print(f"Waiting {num_hours} hours before writing again.")
-            await asyncio.sleep(0.25 * hours)
+            file_write_start_time = time.time()
+            await self.write_file()
+            file_write_duration_s = time.time() - file_write_start_time
+            self.num_writes_to_disk += 1
+            sleep_time = max(0, num_hours * hours - file_write_duration_s)
+            print(f"Waiting {(sleep_time / hours):.2f} hours before writing again.")
+            await asyncio.sleep()
 
 
 alpha = Receiver.bind("Alpha", NodeKiller.bind(), DiskLeaker.bind())
