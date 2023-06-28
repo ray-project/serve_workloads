@@ -1,7 +1,7 @@
 import_path: chaos_test.receiver:alpha
 
 runtime_env:
-  working_dir: https://github.com/ray-project/serve_workloads/archive/3dfa2118f355418dfbd5cfe8626d501ba42b9a67.zip
+  working_dir: https://github.com/ray-project/serve_workloads/archive/edb220016243be1dc6553f9cc610bd6ffba34143.zip
   env_vars:
     RAY_SERVE_REQUEST_PROCESSING_TIMEOUT_S: '1'
 
