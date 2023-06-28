@@ -4,6 +4,7 @@ import yaml
 import asyncio
 import requests
 import itertools
+import traceback
 from pathlib import Path
 from fastapi import FastAPI
 from typing import Dict, Set, Optional, List
@@ -210,9 +211,9 @@ class Pinger(BaseReconfigurableDeployment):
         except Exception as e:
             print(
                 f"{time.strftime('%b %d -- %l:%M%p: ')}"
-                f"run_request_loop for target_url {target_url} crashed with "
-                f"exception: \n{repr(e)}"
+                f"run_request_loop for target_url {target_url} crashed."
             )
+            traceback.print_exc()
 
     def start(self):
         task_methods = [
