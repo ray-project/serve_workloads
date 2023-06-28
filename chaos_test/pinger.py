@@ -745,10 +745,12 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
 
 
 graph = Router.bind(
-    Pinger.options(name="receiver_Pinger").bind(
-        target_tag="Receiver", payload={NODE_KILLER_KEY: KillOptions.SPARE}
-    ),
-    Pinger.options(name="self_Pinger").bind(target_tag="Pinger", payload=None),
+    [
+        Pinger.options(name="receiver_Pinger").bind(
+            target_tag="Receiver", payload={NODE_KILLER_KEY: KillOptions.SPARE}
+        ),
+        Pinger.options(name="self_Pinger").bind(target_tag="Pinger", payload=None),
+    ],
     Reaper.bind(),
     ReceiverHelmsman.bind(),
 )
