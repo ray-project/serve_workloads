@@ -93,7 +93,7 @@ class Router:
     @app.get("/info")
     async def get_info(self):
         info = {}
-        for i in range(self.pinger_handles):
+        for i in range(len(self.pinger_handles)):
             info[f"pinger_{i}"] = (
                 await (await self.pinger_handles[i].get_info.remote())
             ).copy()
@@ -387,8 +387,8 @@ class Pinger(BaseReconfigurableDeployment):
             trace_configs=[trace_config],
         )
 
-    async def _drain_requests(self, pending_request_sets: Optional[List[Set]] = None):
-        await asyncio.gather(self.pending_requests)
+    async def _drain_requests(self):
+        await asyncio.gather(*self.pending_requests)
         self.pending_requests.clear()
 
 
