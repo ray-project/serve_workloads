@@ -132,7 +132,8 @@ class DiskLeaker:
                 f'{num_GB / time_period_m}GB to file "{filename}".'
             )
             with open(filename, "w+") as f:
-                f.write("0" * (num_GB / time_period_m) * GB)
+                num_chars_to_write = int((num_GB / time_period_m) * GB)
+                f.write("0" * num_chars_to_write)
                 f.flush()
                 os.fsync()  # Flush doesn't necessarily write to disk. Need fsync.
             write_duration_s = time.time() - write_start_time
