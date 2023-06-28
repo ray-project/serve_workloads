@@ -365,7 +365,7 @@ class Pinger(BaseReconfigurableDeployment):
 
         # From https://stackoverflow.com/a/63925153
         async def on_request_start(session, trace_config_ctx, params):
-            self.request_counter.inc(metric_tags)
+            self.request_counter.inc(tags=metric_tags)
             trace_config_ctx.start = asyncio.get_event_loop().time()
 
         async def on_request_end(session, trace_config_ctx, params):
