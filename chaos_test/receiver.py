@@ -135,7 +135,7 @@ class DiskLeaker:
                 num_chars_to_write = int((num_GB / time_period_m) * GB)
                 f.write("0" * num_chars_to_write)
                 f.flush()
-                os.fsync()  # Flush doesn't necessarily write to disk. Need fsync.
+                os.fsync(f)  # Flush doesn't necessarily write to disk. Need fsync.
             write_duration_s = time.time() - write_start_time
             await asyncio.sleep(max(0, 60 - write_duration_s))
 
