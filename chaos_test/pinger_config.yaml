@@ -1,57 +1,62 @@
 # Make sure to fill in your receiver_url and bearer_token. See README.
 
-import_path: chaos_test.pinger:graph
+proxy_location: EveryNode
 
-runtime_env:
-  working_dir: https://github.com/ray-project/serve_workloads/archive/d218b7be7f7005947803f233dd99ef6951dbe684.zip
-  env_vars:
-    RAY_SERVE_REQUEST_PROCESSING_TIMEOUT_S: '1'
+http_options:
+  host: 0.0.0.0
+  port: 8000
 
-host: 0.0.0.0
+applications:
 
-port: 8000
-
-deployments:
-- name: Router
-  num_replicas: 1
-  ray_actor_options:
-    num_cpus: 0
-- name: receiver_Pinger
-  num_replicas: 1
-  user_config:
-    url: YOUR_RECEIVER_URL
-    bearer_token: YOUR_RECEIVER_BEARER_TOKEN
-    max_qps: 100
-  ray_actor_options:
-    num_cpus: 0
-- name: self_Pinger
-  num_replicas: 1
-  user_config:
-    url: YOUR_PINGER_URL
-    bearer_token: YOUR_PINGER_BEARER_TOKEN
-    max_qps: 100
-  ray_actor_options:
-    num_cpus: 0
-- name: Reaper
-  num_replicas: 1
-  user_config:
-    receiver_url: YOUR_RECEIVER_URL
-    receiver_bearer_token: YOUR_RECEIVER_BEARER_TOKEN
-    kill_interval_s: 300
-  ray_actor_options:
-    num_cpus: 0
-- name: ReceiverHelmsman
-  num_replicas: 1
-  user_config:
-    project_id: YOUR_PROJECT_ID
-    receiver_service_name: YOUR_RECEIVER_NAME
-    receiver_service_id: YOUR_RECEIVER_SERVICE_ID
-    receiver_build_id: YOUR_RECEIVER_BUILD_ID
-    receiver_compute_config_id: YOUR_RECEIVER_COMPUTE_CONFIG_ID
-    receiver_gcs_external_storage_config: YOUR_RECEIVER_GCS_EXTERNAL_STORAGE_CONFIG
-    receiver_url: YOUR_RECEIVER_URL
-    receiver_bearer_token: YOUR_RECEIVER_BEARER_TOKEN
-    cookie: YOUR_COOKIE
-    upgrade_interval_s: YOUR_UPDATE_INTERVAL_S
-  ray_actor_options:
-    num_cpus: 0
+- name: "default"
+  route_prefix: "/"
+  import_path: chaos_test.pinger:graph
+  runtime_env:
+    working_dir: https://github.com/ray-project/serve_workloads/archive/d218b7be7f7005947803f233dd99ef6951dbe684.zip
+    env_vars:
+      RAY_SERVE_REQUEST_PROCESSING_TIMEOUT_S: '1'
+      RAY_SERVE_ENABLE_EXPERIMENTAL_STREAMING: '1'
+  deployments:
+  - name: Router
+    num_replicas: 1
+    ray_actor_options:
+      num_cpus: 0
+  - name: receiver_Pinger
+    num_replicas: 1
+    user_config:
+      url: YOUR_RECEIVER_URL
+      bearer_token: YOUR_RECEIVER_BEARER_TOKEN
+      max_qps: 100
+    ray_actor_options:
+      num_cpus: 0
+  - name: self_Pinger
+    num_replicas: 1
+    user_config:
+      url: YOUR_PINGER_URL
+      bearer_token: YOUR_PINGER_BEARER_TOKEN
+      max_qps: 100
+    ray_actor_options:
+      num_cpus: 0
+  - name: Reaper
+    num_replicas: 1
+    user_config:
+      receiver_url: YOUR_RECEIVER_URL
+      receiver_bearer_token: YOUR_RECEIVER_BEARER_TOKEN
+      kill_interval_s: 300
+    ray_actor_options:
+      num_cpus: 0
+  - name: ReceiverHelmsman
+    num_replicas: 1
+    user_config:
+      project_id: YOUR_PROJECT_ID
+      receiver_service_name: YOUR_RECEIVER_NAME
+      receiver_service_id: YOUR_RECEIVER_SERVICE_ID
+      receiver_build_id: YOUR_RECEIVER_BUILD_ID
+      receiver_compute_config_id: YOUR_RECEIVER_COMPUTE_CONFIG_ID
+      receiver_gcs_external_storage_config: YOUR_RECEIVER_GCS_EXTERNAL_STORAGE_CONFIG
+      receiver_url: YOUR_RECEIVER_URL
+      receiver_bearer_token: YOUR_RECEIVER_BEARER_TOKEN
+      cookie: YOUR_COOKIE
+      upgrade_interval_s: YOUR_UPDATE_INTERVAL_S
+    ray_actor_options:
+      num_cpus: 0

@@ -1,30 +1,35 @@
-import_path: chaos_test.receiver:alpha
+proxy_location: EveryNode
 
-runtime_env:
-  working_dir: https://github.com/ray-project/serve_workloads/archive/d218b7be7f7005947803f233dd99ef6951dbe684.zip
-  env_vars:
-    RAY_SERVE_REQUEST_PROCESSING_TIMEOUT_S: '1'
+http_options:
+  host: 0.0.0.0
+  port: 8000
 
-host: 0.0.0.0
+applications:
 
-port: 8000
-
-deployments:
-- name: Receiver
-  num_replicas: 3
-  ray_actor_options:
-    num_cpus: 0
-    resources:
-      node_singleton: 1
-- name: NodeKiller
-  num_replicas: 1
-  ray_actor_options:
-    num_cpus: 0
-    resources:
-      node_singleton: 1
-- name: DiskLeaker
-  num_replicas: 1
-  ray_actor_options:
-    num_cpus: 0
-    resources:
-      leak_singleton: 1
+- name: "default"
+  route_prefix: "/"
+  import_path: chaos_test.receiver:alpha
+  runtime_env:
+    working_dir: https://github.com/ray-project/serve_workloads/archive/d218b7be7f7005947803f233dd99ef6951dbe684.zip
+    env_vars:
+      RAY_SERVE_REQUEST_PROCESSING_TIMEOUT_S: '1'
+      RAY_SERVE_ENABLE_EXPERIMENTAL_STREAMING: '1'
+  deployments:
+  - name: Receiver
+    num_replicas: 3
+    ray_actor_options:
+      num_cpus: 0
+      resources:
+        node_singleton: 1
+  - name: NodeKiller
+    num_replicas: 1
+    ray_actor_options:
+      num_cpus: 0
+      resources:
+        node_singleton: 1
+  - name: DiskLeaker
+    num_replicas: 1
+    ray_actor_options:
+      num_cpus: 0
+      resources:
+        leak_singleton: 1
