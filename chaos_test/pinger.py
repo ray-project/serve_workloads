@@ -128,6 +128,8 @@ class Pinger(BaseReconfigurableDeployment):
         self.run_request_loop_task = None
         self._initialize_stats()
         self._initialize_metrics()
+        self._request_id = 0
+        self.pending_request_metadata = dict()
         self.pending_requests = set()
 
     def reconfigure(self, config: Dict):
@@ -152,16 +154,15 @@ class Pinger(BaseReconfigurableDeployment):
             client = self._create_http_client(metric_tags)
 
             while True:
-                json_payload = payload
-
                 start_time = asyncio.get_event_loop().time()
 
                 pending_request_set.add(
-                    client.post(
-                        target_url,
-                        headers={"Authorization": f"Bearer {target_bearer_token}"},
-                        json=json_payload,
-                        timeout=10,
+                    self._make_request(
+                        client=client,
+                        target_url=target_url,
+                        target_bearer_token=target_bearer_token,
+                        payload=payload,
+                        tags=metric_tags,
                     )
                 )
 
@@ -307,7 +308,13 @@ class Pinger(BaseReconfigurableDeployment):
 
         self.latency_gauge = Gauge(
             "pinger_request_latency",
-            description="Latency of last successful request.",
+            description="Latency of last request.",
+            tag_keys=("class", "target"),
+        ).set_default_tags({"class": "Pinger"})
+
+        self.attempts_gauge = Gauge(
+            "pinger_request_num_attempts",
+            description="Number of attempts of last request.",
             tag_keys=("class", "target"),
         ).set_default_tags({"class": "Pinger"})
 
@@ -366,23 +373,37 @@ class Pinger(BaseReconfigurableDeployment):
             self.failed_response_reasons[status_code] = set([reason])
 
     def _create_http_client(self, metric_tags: Dict):
+        max_attempts = 5
 
         # From https://stackoverflow.com/a/63925153
         async def on_request_start(session, trace_config_ctx, params):
-            self.request_counter.inc(tags=metric_tags)
+            request_id = trace_config_ctx.trace_request_ctx["request_id"]
+            if self.pending_request_metadata[request_id]["num_attempts"] == 0:
+                self.request_counter.inc(tags=metric_tags)
+            self.pending_request_metadata[request_id]["num_attempts"] += 1
             trace_config_ctx.start = asyncio.get_event_loop().time()
 
+        def update_request_latency(trace_config_ctx):
+            request_id = trace_config_ctx.trace_request_ctx["request_id"]
+            attempt_latency = asyncio.get_event_loop().time() - trace_config_ctx.start
+            self.pending_request_metadata[request_id][
+                "total_latency"
+            ] += attempt_latency
+
         async def on_request_end(session, trace_config_ctx, params):
-            latency = asyncio.get_event_loop().time() - trace_config_ctx.start
-            self.latency_gauge.set(latency, tags=metric_tags)
+            update_request_latency(trace_config_ctx)
+
+        async def on_request_exception(session, trace_config_ctx, params):
+            update_request_latency(trace_config_ctx)
 
         trace_config = TraceConfig()
         trace_config.on_request_start.append(on_request_start)
         trace_config.on_request_end.append(on_request_end)
+        trace_config.on_request_exception.append(on_request_exception)
 
         return RetryClient(
             retry_options=ExponentialRetry(
-                attempts=5,
+                attempts=max_attempts,
                 start_timeout=1,
                 factor=2,
                 exceptions=[asyncio.TimeoutError, aiohttp.ServerDisconnectedError],
@@ -393,6 +414,46 @@ class Pinger(BaseReconfigurableDeployment):
     async def _drain_requests(self):
         await asyncio.gather(*self.pending_requests)
         self.pending_requests.clear()
+
+    async def _make_request(
+        self,
+        client,
+        target_url: str,
+        target_bearer_token: str,
+        payload: Dict,
+        tags: Dict,
+    ):
+        request_id = self._get_next_request_id()
+        self.pending_request_metadata[request_id] = {
+            "total_latency": 0,
+            "num_attempts": 0,
+        }
+        try:
+            return await client.post(
+                target_url,
+                headers={"Authorization": f"Bearer {target_bearer_token}"},
+                json=payload,
+                timeout=10,
+                trace_request_ctx={"request_id": request_id},
+            )
+        finally:
+            self.latency_gauge.set(
+                self.pending_request_metadata[request_id]["total_latency"], tags=tags
+            )
+            self.attempts_gauge.set(
+                self.pending_request_metadata[request_id]["num_attempts"], tags=tags
+            )
+            del self.pending_request_metadata[request_id]
+
+    def _get_next_request_id(self):
+        """Gets the next request's ID.
+
+        Request IDs cycle between 0 to 999,999.
+        """
+
+        self._request_id += 1
+        self._request_id %= 1000000
+        return self._request_id
 
 
 REAPER_OPTIONS = {
