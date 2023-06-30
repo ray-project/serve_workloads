@@ -744,12 +744,12 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
 
     def _upgrade_receiver(self, upgrade_type: str):
         try:
-            self.receiver_config_template[
+            self.receiver_config_template["applications"][0][
                 "import_path"
             ] = self.next_receiver_import_path
-            self.receiver_config_template["deployments"][1]["ray_actor_options"][
-                "resources"
-            ] = {self.next_singleton_resource: 1}
+            self.receiver_config_template["applications"][0]["deployments"][0][
+                "ray_actor_options"
+            ]["resources"] = {self.next_singleton_resource: 1}
             request_data = {
                 "name": self.receiver_service_name,
                 "description": "Receives the pinger's pings.",
@@ -777,8 +777,8 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
                 }
             )
             self.latest_receiver_import_path = self.receiver_config_template[
-                "import_path"
-            ]
+                "applications"
+            ][0]["import_path"]
             self.receiver_import_path_gauge.set(
                 {
                     "class": "ReceiverHelmsman",
