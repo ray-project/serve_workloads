@@ -735,7 +735,9 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
         cur_dir = str(Path(__file__).parent)
         aliased_path_prefix = "/tmp/ray/session_latest/runtime_resources"
         aliased_dir = aliased_path_prefix + cur_dir.split("runtime_resources")[1]
-        with open(f"{aliased_dir}/{RECEIVER_CONFIG_FILENAME}") as f:
+        receiver_config_file_path = f"{aliased_dir}/{RECEIVER_CONFIG_FILENAME}"
+        print(f'Using Receiver config at "{receiver_config_file_path}"')
+        with open(receiver_config_file_path) as f:
             receiver_config_template = yaml.safe_load(f)
 
         return receiver_config_template
