@@ -10,7 +10,7 @@ applications:
   route_prefix: "/"
   import_path: chaos_test.receiver:alpha
   runtime_env:
-    working_dir: https://github.com/ray-project/serve_workloads/archive/d218b7be7f7005947803f233dd99ef6951dbe684.zip
+    working_dir: https://github.com/ray-project/serve_workloads/archive/fffc34e8e07558abbfa31ee08b01874960c44954.zip
     env_vars:
       RAY_SERVE_REQUEST_PROCESSING_TIMEOUT_S: '1'
       RAY_SERVE_ENABLE_EXPERIMENTAL_STREAMING: '1'
