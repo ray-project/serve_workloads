@@ -17,7 +17,7 @@
   "gnetId": null,
   "graphTooltip": 0,
   "id": 47789,
-  "iteration": 1687990355228,
+  "iteration": 1688169287716,
   "links": [],
   "panels": [
     {
@@ -1229,6 +1229,202 @@
       }
     },
     {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "Prometheus",
+      "description": "The number of retries the latest request sent to the Receiver.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 50
+      },
+      "hiddenSeries": false,
+      "id": 35,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.17",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "ray_pinger_request_num_attempts{ClusterId=~\"$ClusterId\", target=~\"$Target\"} - 1",
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "Retries",
+          "queryType": "randomWalk",
+          "refId": "Number of Retries"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Number of Retries",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
+      "aliasColors": {},
+      "bars": false,
+      "dashLength": 10,
+      "dashes": false,
+      "datasource": "Prometheus",
+      "description": "The number of retries for requests sent to the Receiver, averaged over a period of 10 minutes.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": []
+      },
+      "fill": 1,
+      "fillGradient": 0,
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 50
+      },
+      "hiddenSeries": false,
+      "id": 36,
+      "legend": {
+        "avg": false,
+        "current": false,
+        "max": false,
+        "min": false,
+        "show": true,
+        "total": false,
+        "values": false
+      },
+      "lines": true,
+      "linewidth": 1,
+      "nullPointMode": "null",
+      "options": {
+        "alertThreshold": true
+      },
+      "percentage": false,
+      "pluginVersion": "7.5.17",
+      "pointradius": 2,
+      "points": false,
+      "renderer": "flot",
+      "seriesOverrides": [],
+      "spaceLength": 10,
+      "stack": false,
+      "steppedLine": false,
+      "targets": [
+        {
+          "exemplar": true,
+          "expr": "avg_over_time(ray_pinger_request_num_attempts{ClusterId=~\"$ClusterId\", target=~\"$Target\"}[10m]) - 1",
+          "instant": false,
+          "interval": "",
+          "intervalFactor": 1,
+          "legendFormat": "Retries",
+          "queryType": "randomWalk",
+          "refId": "Average Number of Retries"
+        }
+      ],
+      "thresholds": [],
+      "timeFrom": null,
+      "timeRegions": [],
+      "timeShift": null,
+      "title": "Average Number of Retries",
+      "tooltip": {
+        "shared": true,
+        "sort": 0,
+        "value_type": "individual"
+      },
+      "type": "graph",
+      "xaxis": {
+        "buckets": null,
+        "mode": "time",
+        "name": null,
+        "show": true,
+        "values": []
+      },
+      "yaxes": [
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        },
+        {
+          "format": "short",
+          "label": null,
+          "logBase": 1,
+          "max": null,
+          "min": null,
+          "show": true
+        }
+      ],
+      "yaxis": {
+        "align": false,
+        "alignLevel": null
+      }
+    },
+    {
       "aliasColors": {
         "Send Rate (requests / second)": "red",
         "Send rate (requests / second)": "red"
@@ -1248,7 +1444,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 50
+        "y": 58
       },
       "hiddenSeries": false,
       "id": 33,
@@ -1352,7 +1548,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 50
+        "y": 58
       },
       "hiddenSeries": false,
       "id": 34,
@@ -1393,7 +1589,7 @@
         },
         {
           "exemplar": true,
-          "expr": "ray_pinger_pending_requests{ClusterId=~\"$ClusterId\", target=~\"$Target\"}",
+          "expr": "ray_pinger_pending_requests{ClusterId=~\"$ClusterId\"}",
           "hide": false,
           "interval": "",
           "legendFormat": "Number of pending requests",
@@ -1448,7 +1644,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 58
+        "y": 66
       },
       "id": 19,
       "panels": [],
@@ -1474,7 +1670,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 59
+        "y": 67
       },
       "hiddenSeries": false,
       "id": 20,
@@ -1574,7 +1770,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 59
+        "y": 67
       },
       "hiddenSeries": false,
       "id": 21,
@@ -1676,7 +1872,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 67
+        "y": 75
       },
       "hiddenSeries": false,
       "id": 22,
@@ -1794,7 +1990,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 67
+        "y": 75
       },
       "hiddenSeries": false,
       "id": 23,
@@ -1898,7 +2094,7 @@
         "h": 1,
         "w": 24,
         "x": 0,
-        "y": 75
+        "y": 83
       },
       "id": 25,
       "panels": [],
@@ -1927,7 +2123,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 76
+        "y": 84
       },
       "hiddenSeries": false,
       "id": 28,
@@ -2045,7 +2241,7 @@
         "h": 8,
         "w": 12,
         "x": 12,
-        "y": 76
+        "y": 84
       },
       "hiddenSeries": false,
       "id": 29,
@@ -2155,7 +2351,7 @@
         "h": 8,
         "w": 12,
         "x": 0,
-        "y": 84
+        "y": 92
       },
       "hiddenSeries": false,
       "id": 30,
@@ -2260,7 +2456,7 @@
     "list": [
       {
         "current": {
-          "selected": false,
+          "selected": true,
           "text": ".*",
           "value": ".*"
         },
@@ -2319,7 +2515,7 @@
     ]
   },
   "time": {
-    "from": "now-5m",
+    "from": "now-1h",
     "to": "now"
   },
   "timepicker": {},
