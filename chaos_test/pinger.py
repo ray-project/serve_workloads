@@ -610,7 +610,7 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
             await asyncio.sleep(5)
 
     async def run_upgrade_loop(self):
-        upgrade_type_iter = itertools.cycle(["IN_PLACE", "ROLLING"])
+        upgrade_type_iter = itertools.cycle(["IN_PLACE", "ROLLOUT"])
         while True:
             next_upgrade_type = next(upgrade_type_iter)
             print(
