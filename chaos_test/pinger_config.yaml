@@ -2,9 +2,6 @@
 
 proxy_location: EveryNode
 
-http_options:
-  port: 8000
-
 applications:
 
 - name: "default"
