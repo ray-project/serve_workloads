@@ -139,16 +139,12 @@ class Pinger(BaseReconfigurableDeployment):
 
     async def run_request_loop(
         self,
-        pending_request_set: Set,
         target_tag: str,
-        target_url: str,
-        target_bearer_token: str,
-        max_qps: int,
         payload: Optional[Dict] = None,
     ):
         try:
             await self._drain_requests()
-            send_interval_s = 1 / max_qps
+            send_interval_s = 1 / self.max_qps
             metric_tags = {"class": "Pinger", "target": target_tag}
 
             client = self._create_http_client(metric_tags)
@@ -157,21 +153,21 @@ class Pinger(BaseReconfigurableDeployment):
             while True:
                 start_time = asyncio.get_event_loop().time()
 
-                pending_request_set.add(
+                self.pending_requests.add(
                     self._make_request(
                         client=client,
-                        target_url=target_url,
-                        target_bearer_token=target_bearer_token,
+                        target_url=self.url,
+                        target_bearer_token=self.bearer_token,
                         payload=payload,
                         tags=metric_tags,
                     )
                 )
 
-                done, pending = await asyncio.wait(pending_request_set, timeout=0)
-                pending_request_set = pending
-                self.num_pending_requests = len(pending_request_set)
+                done, pending = await asyncio.wait(self.pending_requests, timeout=0)
+                self.pending_requests = pending
+                self.num_pending_requests = len(self.pending_requests)
                 self.pending_requests_gauge.set(
-                    len(pending_request_set), tags=metric_tags
+                    len(self.pending_requests), tags=metric_tags
                 )
 
                 num_successful_requests = 0
@@ -207,11 +203,11 @@ class Pinger(BaseReconfigurableDeployment):
                         self.fail_counter.inc(tags=metric_tags)
                         self._increment_error_counter(status_code, tags=metric_tags)
 
-                    if self.current_num_requests % (max_qps * 10) == 0:
+                    if self.current_num_requests % (self.max_qps * 10) == 0:
                         print(
                             f"{time.strftime('%b %d -- %l:%M%p: ')}"
                             f"Sent {self.current_num_requests} "
-                            f'requests to "{target_url}".'
+                            f'requests to "{self.url}".'
                         )
 
                 # Count successful requests in a batch for efficiency
@@ -238,7 +234,7 @@ class Pinger(BaseReconfigurableDeployment):
         except Exception as e:
             print(
                 f"{time.strftime('%b %d -- %l:%M%p: ')}"
-                f"run_request_loop for target_url {target_url} crashed."
+                f"run_request_loop for target_url {self.url} crashed."
             )
             traceback.print_exc(file=sys.stdout)
 
@@ -248,11 +244,7 @@ class Pinger(BaseReconfigurableDeployment):
         else:
             self.run_request_loop_task = run_background_task(
                 self.run_request_loop(
-                    pending_request_set=self.pending_requests,
                     target_tag=self.target_tag,
-                    target_url=self.url,
-                    target_bearer_token=self.bearer_token,
-                    max_qps=self.max_qps,
                     payload=self.payload,
                 )
             )
