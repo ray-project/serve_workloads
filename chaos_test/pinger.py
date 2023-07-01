@@ -153,6 +153,7 @@ class Pinger(BaseReconfigurableDeployment):
 
             client = self._create_http_client(metric_tags)
 
+            qps_warning_grace_number = 1
             while True:
                 start_time = asyncio.get_event_loop().time()
 
@@ -226,11 +227,14 @@ class Pinger(BaseReconfigurableDeployment):
                 if send_interval_remaining_s > 0:
                     await asyncio.sleep(send_interval_remaining_s)
                 else:
-                    print(
-                        "Warning: max_qps is too high. Request processing "
-                        "time exceeded send interval by "
-                        f"{send_interval_remaining_s} seconds."
-                    )
+                    qps_warning_grace_number -= 1
+                    if qps_warning_grace_number == 0:
+                        print(
+                            "Warning: max_qps is too high. Request processing "
+                            "time exceeded send interval by "
+                            f"{send_interval_remaining_s} seconds."
+                        )
+                        qps_warning_grace_number = 10
         except Exception as e:
             print(
                 f"{time.strftime('%b %d -- %l:%M%p: ')}"
