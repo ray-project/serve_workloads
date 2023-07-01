@@ -17,7 +17,7 @@
   "gnetId": null,
   "graphTooltip": 0,
   "id": 47789,
-  "iteration": 1688169287716,
+  "iteration": 1688170653910,
   "links": [],
   "panels": [
     {
@@ -739,7 +739,7 @@
       "dashLength": 10,
       "dashes": false,
       "datasource": "Prometheus",
-      "description": "The rate at which the Pinger sends requests that succeed. Averaged over 1 hour.",
+      "description": "The rate at which the Pinger sends requests that succeed. Averaged over 5 minutes.",
       "fieldConfig": {
         "defaults": {},
         "overrides": []
@@ -781,7 +781,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "rate(ray_pinger_num_requests_succeeded{ClusterId=~\"$ClusterId\", target=~\"$Target\"}[1h])",
+          "expr": "rate(ray_pinger_num_requests_succeeded{ClusterId=~\"$ClusterId\", target=~\"$Target\"}[5m])",
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
@@ -2522,5 +2522,5 @@
   "timezone": "",
   "title": "Ray Serve Chaos Test",
   "uid": "pCWbEAE4k",
-  "version": 2
+  "version": 4
 }
