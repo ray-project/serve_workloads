@@ -166,17 +166,14 @@ class Pinger(BaseReconfigurableDeployment):
                     )
                 )
 
-                # Spend half the send interval waiting for pending requests.
-                # Spend the rest on processing the responses.
-                done, pending = await asyncio.wait(
-                    pending_request_set, timeout=send_interval_s / 2
-                )
+                done, pending = await asyncio.wait(pending_request_set, timeout=0)
                 pending_request_set = pending
                 self.num_pending_requests = len(pending_request_set)
                 self.pending_requests_gauge.set(
                     len(pending_request_set), tags=metric_tags
                 )
 
+                num_successful_requests = 0
                 for task in done:
                     try:
                         response = await task
@@ -198,8 +195,7 @@ class Pinger(BaseReconfigurableDeployment):
                             f"Got exception from request: \n{repr(e)}"
                         )
                     if status_code == 200:
-                        self._count_successful_request()
-                        self.success_counter.inc(tags=metric_tags)
+                        num_successful_requests += 1
                     else:
                         response_text = await response.text()
                         print(
@@ -217,11 +213,23 @@ class Pinger(BaseReconfigurableDeployment):
                             f'requests to "{target_url}".'
                         )
 
+                # Count successful requests in a batch for efficiency
+                self._count_successful_request(num_successful_requests)
+                self.success_counter.inc(
+                    value=num_successful_requests, tags=metric_tags
+                )
+
                 send_interval_remaining_s = send_interval_s - (
                     asyncio.get_event_loop().time() - start_time
                 )
                 if send_interval_remaining_s > 0:
                     await asyncio.sleep(send_interval_remaining_s)
+                else:
+                    print(
+                        "Warning: max_qps is too high. Request processing "
+                        "time exceeded send interval by "
+                        f"{send_interval_remaining_s} seconds."
+                    )
         except Exception as e:
             print(
                 f"{time.strftime('%b %d -- %l:%M%p: ')}"
@@ -353,11 +361,11 @@ class Pinger(BaseReconfigurableDeployment):
         else:
             self.http_error_fallback_counter.inc(tags=tags)
 
-    def _count_successful_request(self):
-        self.total_num_requests += 1
-        self.total_successful_requests += 1
-        self.current_num_requests += 1
-        self.current_successful_requests += 1
+    def _count_successful_request(self, num_successful_requests: int):
+        self.total_num_requests += num_successful_requests
+        self.total_successful_requests += num_successful_requests
+        self.current_num_requests += num_successful_requests
+        self.current_successful_requests += num_successful_requests
 
     def _count_failed_request(self, status_code: int, reason: str = ""):
         self.total_num_requests += 1
