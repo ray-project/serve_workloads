@@ -214,10 +214,11 @@ class Pinger(BaseReconfigurableDeployment):
                         )
 
                 # Count successful requests in a batch for efficiency
-                self._count_successful_request(num_successful_requests)
-                self.success_counter.inc(
-                    value=num_successful_requests, tags=metric_tags
-                )
+                if num_successful_requests > 0:
+                    self._count_successful_request(num_successful_requests)
+                    self.success_counter.inc(
+                        value=num_successful_requests, tags=metric_tags
+                    )
 
                 send_interval_remaining_s = send_interval_s - (
                     asyncio.get_event_loop().time() - start_time
