@@ -2,6 +2,7 @@ import os
 import json
 import time
 import asyncio
+import logging
 import subprocess
 from datetime import datetime
 from starlette.requests import Request
@@ -12,6 +13,8 @@ import ray
 from ray import serve
 from ray._private.utils import run_background_task
 from ray.experimental.state.api import list_actors
+
+logger = logging.getLogger("ray.serve")
 
 
 @serve.deployment(
@@ -115,24 +118,19 @@ class DiskLeaker:
         return self.num_writes_to_disk
 
     async def write_file(self):
-        """Writes 1 GB of data over a period of time."""
+        """Writes 10 GB of data over a period of time."""
 
         num_GB, GB = 10, (1024 * 1024 * 1024)
         time_period_m = 15
-        timestamp = "{:%Y-%m-%d-%H-%M-%S-%f-%p}".format(datetime.now())
-        filename = f"{timestamp}-{self.leak_file_name}"
 
         for _ in range(time_period_m):
             write_start_time = time.time()
             print(
-                f"{time.strftime('%b %d -- %l:%M%p: ')}Writing "
-                f'{num_GB / time_period_m}GB to file "{filename}".'
+                f"{time.strftime('%b %d -- %l:%M%p: ')}Writing roughly "
+                f"{num_GB / time_period_m}GB to log."
             )
-            with open(filename, "w+") as f:
-                num_chars_to_write = int((num_GB / time_period_m) * GB)
-                f.write("0" * num_chars_to_write)
-                f.flush()
-                os.fsync(f)  # Flush doesn't necessarily write to disk. Need fsync.
+            num_chars_to_write = int((num_GB / time_period_m) * GB)
+            logger.info("0" * num_chars_to_write)
             write_duration_s = time.time() - write_start_time
             await asyncio.sleep(max(0, 60 - write_duration_s))
 
