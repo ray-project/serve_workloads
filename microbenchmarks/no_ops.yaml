@@ -1,0 +1,10 @@
+proxy_location: EveryNode
+
+applications:
+
+- name: no_ops
+  route_prefix: /
+  import_path: microbenchmarks.no_ops:app_builder
+  args:
+    num_forwards: 0
+  runtime_env: https://github.com/ray-project/serve_workloads/archive/7c469722ce25e6e0bc60bf3e2810aeb0d29cc779.zip
