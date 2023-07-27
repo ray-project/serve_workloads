@@ -13,6 +13,7 @@ import ray
 import time
 import argparse
 import subprocess
+from tqdm import tqdm
 
 HTML_RESULTS_DIR = "locust_results"
 DEFAULT_RESULT_FILENAME = f"{time.strftime('%Y-%m-%d-%p-%H-%M-%S-%f-results.html')}"
@@ -60,7 +61,7 @@ print(f"Spawning {num_locust_workers} Locust worker processes.")
 
 # Hold reference to each locust worker to prevent them from being torn down
 locust_workers = []
-for _ in range(num_locust_workers):
+for _ in tqdm(range(num_locust_workers)):
     locust_worker = LocustWorker.remote()
     ray.get(locust_worker.start.remote())
     locust_workers.append(locust_worker)
