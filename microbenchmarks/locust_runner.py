@@ -57,14 +57,18 @@ class LocustWorker:
         self.proc = subprocess.Popen(worker_locust_cmd)
 
 
-print(f"Spawning {num_locust_workers} Locust worker processes.")
+print(f"Spawning {num_locust_workers} Locust worker Ray tasks.")
 
 # Hold reference to each locust worker to prevent them from being torn down
 locust_workers = []
+start_refs = []
 for _ in tqdm(range(num_locust_workers)):
     locust_worker = LocustWorker.remote()
-    ray.get(locust_worker.start.remote())
     locust_workers.append(locust_worker)
+    start_refs.append(locust_worker.start.remote())
+
+print(f"Waiting for Locust worker processes to start.")
+ray.get(start_refs)
 
 master_locust_cmd = base_locust_cmd + [
     "--master",
