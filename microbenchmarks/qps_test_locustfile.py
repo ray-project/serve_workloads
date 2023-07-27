@@ -7,7 +7,7 @@ def _(parser):
         "-p", "--payload-size", type=int, default=0, help="Request body size."
     )
     parser.add_argument(
-        "-t",
+        "-b",
         "--bearer-token",
         type=str,
         default="",
@@ -26,7 +26,7 @@ class ConstantUser(FastHttpUser):
 
     @task
     def hello_world(self):
-        bearer_token = self.bearer_token.parsed_options.bearer_token
+        bearer_token = self.environment.parsed_options.bearer_token
         self.client.post(
             "/",
             json=self.environment.payload,

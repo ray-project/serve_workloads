@@ -7,4 +7,5 @@ applications:
   import_path: microbenchmarks.no_ops:app_builder
   args:
     num_forwards: 0
-  runtime_env: https://github.com/ray-project/serve_workloads/archive/cd5136e77b13730d2a7425abcdd6a058dfb8eeea.zip
+  runtime_env:
+    working_dir: https://github.com/ray-project/serve_workloads/archive/cd5136e77b13730d2a7425abcdd6a058dfb8eeea.zip
