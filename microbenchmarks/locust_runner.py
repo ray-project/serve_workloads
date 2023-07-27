@@ -16,7 +16,7 @@ import subprocess
 from tqdm import tqdm
 
 HTML_RESULTS_DIR = "locust_results"
-DEFAULT_RESULT_FILENAME = f"{time.strftime('%Y-%m-%d-%p-%H-%M-%S-%f-results.html')}"
+DEFAULT_RESULT_FILENAME = f"{time.strftime('%Y-%m-%d-%p-%H-%M-%S-results.html')}"
 
 parser = argparse.ArgumentParser()
 parser.add_argument(
