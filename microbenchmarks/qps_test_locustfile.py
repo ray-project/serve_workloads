@@ -11,7 +11,7 @@ def _(parser):
         "--bearer-token",
         type=str,
         default="",
-        help="Bearer token of Anyscale service.",
+        help="Bearer token of service.",
     )
 
 

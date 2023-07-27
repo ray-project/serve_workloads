@@ -2,6 +2,10 @@
 
 Run this script on a Ray cluster's master node to launch one locust workers
 across the Ray cluster's nodes.
+
+Example command:
+
+$ python locust_runner.py -f locustfile.py -u 200 -r 50 --host [HOST_URL]
 """
 
 import os
