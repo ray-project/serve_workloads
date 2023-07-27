@@ -1,7 +1,7 @@
 """Run Locust on Ray cluster.
 
-Run this script on a Ray cluster's master node to launch one locust workers
-across the Ray cluster's nodes.
+Run this script on a Ray cluster's head node to launch one Locust worker per
+CPU across the Ray cluster's nodes.
 
 Example command:
 
