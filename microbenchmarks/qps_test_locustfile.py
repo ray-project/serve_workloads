@@ -23,6 +23,8 @@ def _(environment, **kw):
 
 class ConstantUser(FastHttpUser):
     wait_time = constant(0)
+    network_timeout = None
+    connection_timeout = None
 
     @task
     def hello_world(self):
