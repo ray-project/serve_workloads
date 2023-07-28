@@ -68,7 +68,25 @@ for _ in tqdm(range(num_locust_workers)):
     start_refs.append(locust_worker.start.remote())
 
 print(f"Waiting for Locust worker processes to start.")
-ray.get(start_refs)
+
+
+def wait_for_locust_workers(start_refs):
+    """Generator that yields whenever a worker process starts.
+
+    Use with tqdm to track how many workers have started. If you don't need
+    tqdm, use ray.get(start_refs) instead of calling this function.
+    """
+
+    remaining_start_refs = start_refs
+    while remaining_start_refs:
+        finished_start_refs, remaining_start_refs = ray.wait(remaining_start_refs)
+        for ref in finished_start_refs:
+            yield ray.get(ref)
+
+
+# No-op for-loop to let tqdm track wait_for_locust_workers() progress
+for _ in tqdm(wait_for_locust_workers(start_refs), total=num_locust_workers):
+    pass
 
 master_locust_cmd = base_locust_cmd + [
     "--master",
