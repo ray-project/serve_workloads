@@ -25,6 +25,8 @@ applications:
         node_singleton: 1
   - name: DiskLeaker
     num_replicas: 1
+    user_config:
+      num_GB: 10
     ray_actor_options:
       num_cpus: 0
       resources:
