@@ -4,7 +4,7 @@ import time
 import asyncio
 import logging
 import subprocess
-from datetime import datetime
+from typing import Dict
 from starlette.requests import Request
 
 from chaos_test.constants import NODE_KILLER_KEY, DISK_LEAKER_KEY, KillOptions
@@ -111,8 +111,15 @@ class DiskLeaker:
         self.leak_dir = "/tmp/disk_leaker_files/"
         self.leak_file_name = "leak_file.log"
         self.num_writes_to_disk = 0
+        self.num_GB = 10
+        print(f"num_GB set to {self.num_GB}")
         os.makedirs(self.leak_dir, exist_ok=True)
         run_background_task(self.leak())
+
+    def reconfigure(self, config: Dict) -> None:
+        if "num_GB" in config:
+            self.num_GB = int(config["num_GB"])
+            print(f"num_GB set to {self.num_GB}")
 
     def info(self):
         return self.num_writes_to_disk
@@ -120,16 +127,16 @@ class DiskLeaker:
     async def write_file(self):
         """Writes 10 GB of data over a period of time."""
 
-        num_GB, GB = 10, (1024 * 1024 * 1024)
+        self.num_GB, GB = 10, (1024 * 1024 * 1024)
         time_period_m = 15
 
         for _ in range(time_period_m):
             write_start_time = time.time()
             print(
                 f"{time.strftime('%b %d -- %l:%M%p: ')}Writing roughly "
-                f"{num_GB / time_period_m}GB to log."
+                f"{self.num_GB / time_period_m}GB to log."
             )
-            num_chars_to_write = int((num_GB / time_period_m) * GB)
+            num_chars_to_write = int((self.num_GB / time_period_m) * GB)
             logger.info("0" * num_chars_to_write)
             write_duration_s = time.time() - write_start_time
             await asyncio.sleep(max(0, 60 - write_duration_s))
