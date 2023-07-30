@@ -20,7 +20,7 @@ class Forward:
 
 @serve.deployment
 class NoOp:
-    def __call__(self):
+    def __call__(self, *args):
         return "No-op"
 
 
