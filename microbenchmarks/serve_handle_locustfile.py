@@ -9,6 +9,7 @@ from ray import serve
 class LocustServeClient:
     def __init__(self, request_event, deployment_name: str):
         self._request_event = request_event
+        ray.init(address="auto")
         self.handle = serve.get_deployment(deployment_name).get_handle()
 
     def request(self, *args, **kwargs):
@@ -40,8 +41,8 @@ class ServeHandleUser(User):
     def __init__(self, environment):
         super().__init__(environment)
 
-        # Change deployment_name here to use a different deployment
-        deployment_name = "no_ops_NoOp"
+        # Pass in deployment name through --host flag
+        deployment_name = self.host
 
         self.client = LocustServeClient(
             request_event=environment.events.request, deployment_name=deployment_name
