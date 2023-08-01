@@ -17,7 +17,7 @@
   "gnetId": null,
   "graphTooltip": 0,
   "id": 47789,
-  "iteration": 1690918771963,
+  "iteration": 1690918771975,
   "links": [],
   "panels": [
     {
@@ -1947,7 +1947,7 @@
         },
         {
           "exemplar": true,
-          "expr": "rate(ray_pinger_num_kill_requests_sent{ClusterId=~\"$ClusterId\", target=~\"$Target\", ServiceVersionName=~\"$ServiceVersionName\"}[30s]) * 30",
+          "expr": "rate(ray_pinger_num_kill_requests_sent{ClusterId=~\"$ClusterId\", ServiceVersionName=~\"$ServiceVersionName\"}[30s]) * 30",
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
@@ -1957,11 +1957,11 @@
         },
         {
           "exemplar": true,
-          "expr": "rate(ray_pinger_receiver_num_in_place_upgrade_requests_sent{ClusterId=~\"$ClusterId\", target=~\"$Target\", ServiceVersionName=~\"$ServiceVersionName\"}[30s]) * 30",
+          "expr": "rate(ray_pinger_receiver_num_upgrade_requests_sent{ClusterId=~\"$ClusterId\", ServiceVersionName=~\"$ServiceVersionName\"}[30s]) * 30",
           "hide": false,
           "interval": "",
-          "legendFormat": "Rate of in-place upgrade requests sent (requests/second)",
-          "refId": "Rate of In-Place Upgrade Requests"
+          "legendFormat": "Rate of upgrade requests sent (requests/second)",
+          "refId": "Rate of Upgrade Requests"
         }
       ],
       "thresholds": [],
@@ -2059,7 +2059,7 @@
       "targets": [
         {
           "exemplar": true,
-          "expr": "rate(ray_pinger_receiver_upgrade_requests_failed{ClusterId=~\"$ClusterId\", target=~\"$Target\", ServiceVersionName=~\"$ServiceVersionName\"}[30s]) * 30",
+          "expr": "rate(ray_pinger_receiver_upgrade_requests_failed{ClusterId=~\"$ClusterId\", ServiceVersionName=~\"$ServiceVersionName\"}[30s]) * 30",
           "hide": false,
           "interval": "",
           "legendFormat": "Rate of failed requests sent (requests/second)",
@@ -2067,15 +2067,15 @@
         },
         {
           "exemplar": true,
-          "expr": "rate(ray_pinger_receiver_num_in_place_upgrade_requests_sent{ClusterId=~\"$ClusterId\", target=~\"$Target\", ServiceVersionName=~\"$ServiceVersionName\"}[30s]) * 30",
+          "expr": "rate(ray_pinger_receiver_num_upgrade_requests_sent{ClusterId=~\"$ClusterId\", ServiceVersionName=~\"$ServiceVersionName\"}[30s]) * 30",
           "hide": false,
           "interval": "",
-          "legendFormat": "Rate of in-place upgrade requests sent (requests/second)",
-          "refId": "Rate of In-Place Upgrade Requests"
+          "legendFormat": "Rate of upgrade requests sent (requests/second)",
+          "refId": "Rate of Upgrade Requests"
         },
         {
           "exemplar": true,
-          "expr": "rate(ray_pinger_num_kill_requests_sent{ClusterId=~\"$ClusterId\", target=~\"$Target\", ServiceVersionName=~\"$ServiceVersionName\"}[30s]) * 30",
+          "expr": "rate(ray_pinger_num_kill_requests_sent{ClusterId=~\"$ClusterId\", ServiceVersionName=~\"$ServiceVersionName\"}[30s]) * 30",
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
@@ -2204,11 +2204,11 @@
         },
         {
           "exemplar": true,
-          "expr": "rate(ray_pinger_receiver_num_in_place_upgrade_requests_sent{ClusterId=~\"$ClusterId\", ServiceVersionName=~\"$ServiceVersionName\"}[30s]) * 30",
+          "expr": "rate(ray_pinger_receiver_num_upgrade_requests_sent{ClusterId=~\"$ClusterId\", ServiceVersionName=~\"$ServiceVersionName\"}[30s]) * 30",
           "hide": false,
           "interval": "",
-          "legendFormat": "Rate of in-place upgrade requests sent (requests / second)",
-          "refId": "Rate of In-Place Upgrade Requests Sent"
+          "legendFormat": "Rate of upgrade requests sent (requests / second)",
+          "refId": "Rate of Upgrade Requests Sent"
         },
         {
           "exemplar": true,
@@ -2437,11 +2437,11 @@
         },
         {
           "exemplar": true,
-          "expr": "rate(ray_pinger_receiver_num_in_place_upgrade_requests_sent{ClusterId=~\"$ClusterId\", ServiceVersionName=~\"$ServiceVersionName\"}[30s])",
+          "expr": "rate(ray_pinger_receiver_num_upgrade_requests_sent{ClusterId=~\"$ClusterId\", ServiceVersionName=~\"$ServiceVersionName\"}[30s])",
           "hide": false,
           "interval": "",
-          "legendFormat": "Rate of in-place upgrade requests sent (requests / second)",
-          "refId": "Rate of In-Place Upgrade Requests Sent"
+          "legendFormat": "Rate of upgrade requests sent (requests / second)",
+          "refId": "Rate of Upgrade Requests Sent"
         },
         {
           "exemplar": true,
@@ -2592,5 +2592,5 @@
   "timezone": "",
   "title": "Ray Serve Chaos Test",
   "uid": "pCWbEAE4k",
-  "version": 7
+  "version": 8
 }
