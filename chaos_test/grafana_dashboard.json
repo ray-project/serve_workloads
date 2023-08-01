@@ -17,7 +17,7 @@
   "gnetId": null,
   "graphTooltip": 0,
   "id": 47789,
-  "iteration": 1690918771933,
+  "iteration": 1690918771963,
   "links": [],
   "panels": [
     {
@@ -1619,7 +1619,7 @@
         },
         {
           "exemplar": true,
-          "expr": "ray_pinger_pending_requests{ClusterId=~\"$ClusterId\"}",
+          "expr": "ray_pinger_pending_requests{ClusterId=~\"$ClusterId\", target=~\"$Target\", ServiceVersionName=~\"$ServiceVersionName\"}",
           "hide": false,
           "interval": "",
           "legendFormat": "Number of pending requests",
@@ -1947,7 +1947,7 @@
         },
         {
           "exemplar": true,
-          "expr": "rate(ray_pinger_num_kill_requests_sent{ClusterId=~\"$ClusterId\"}[30s]) * 30",
+          "expr": "rate(ray_pinger_num_kill_requests_sent{ClusterId=~\"$ClusterId\", target=~\"$Target\", ServiceVersionName=~\"$ServiceVersionName\"}[30s]) * 30",
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
@@ -1957,7 +1957,7 @@
         },
         {
           "exemplar": true,
-          "expr": "rate(ray_pinger_receiver_num_in_place_upgrade_requests_sent{ClusterId=~\"$ClusterId\"}[30s]) * 30",
+          "expr": "rate(ray_pinger_receiver_num_in_place_upgrade_requests_sent{ClusterId=~\"$ClusterId\", target=~\"$Target\", ServiceVersionName=~\"$ServiceVersionName\"}[30s]) * 30",
           "hide": false,
           "interval": "",
           "legendFormat": "Rate of in-place upgrade requests sent (requests/second)",
@@ -2067,7 +2067,7 @@
         },
         {
           "exemplar": true,
-          "expr": "rate(ray_pinger_receiver_num_in_place_upgrade_requests_sent{ClusterId=~\"$ClusterId\"}[30s]) * 30",
+          "expr": "rate(ray_pinger_receiver_num_in_place_upgrade_requests_sent{ClusterId=~\"$ClusterId\", target=~\"$Target\", ServiceVersionName=~\"$ServiceVersionName\"}[30s]) * 30",
           "hide": false,
           "interval": "",
           "legendFormat": "Rate of in-place upgrade requests sent (requests/second)",
@@ -2075,7 +2075,7 @@
         },
         {
           "exemplar": true,
-          "expr": "rate(ray_pinger_num_kill_requests_sent{ClusterId=~\"$ClusterId\"}[30s]) * 30",
+          "expr": "rate(ray_pinger_num_kill_requests_sent{ClusterId=~\"$ClusterId\", target=~\"$Target\", ServiceVersionName=~\"$ServiceVersionName\"}[30s]) * 30",
           "instant": false,
           "interval": "",
           "intervalFactor": 1,
@@ -2204,7 +2204,7 @@
         },
         {
           "exemplar": true,
-          "expr": "rate(ray_pinger_receiver_num_in_place_upgrade_requests_sent{ClusterId=~\"$ClusterId\"}[30s]) * 30",
+          "expr": "rate(ray_pinger_receiver_num_in_place_upgrade_requests_sent{ClusterId=~\"$ClusterId\", ServiceVersionName=~\"$ServiceVersionName\"}[30s]) * 30",
           "hide": false,
           "interval": "",
           "legendFormat": "Rate of in-place upgrade requests sent (requests / second)",
@@ -2212,7 +2212,7 @@
         },
         {
           "exemplar": true,
-          "expr": "rate(ray_pinger_num_kill_requests_sent{ClusterId=~\"$ClusterId\"}[30s]) * 30",
+          "expr": "rate(ray_pinger_num_kill_requests_sent{ClusterId=~\"$ClusterId\", ServiceVersionName=~\"$ServiceVersionName\"}[30s]) * 30",
           "hide": false,
           "interval": "",
           "legendFormat": "Rate of node kill requests sent (requests / second)",
@@ -2325,7 +2325,7 @@
         },
         {
           "exemplar": true,
-          "expr": "rate(ray_pinger_num_requests_failed{ClusterId=~\"$ClusterId\", target=\"Receiver\"}[30s]) * 30",
+          "expr": "rate(ray_pinger_num_requests_failed{ClusterId=~\"$ClusterId\", target=\"Receiver\", ServiceVersionName=~\"$ServiceVersionName\"}[30s]) * 30",
           "hide": false,
           "interval": "",
           "legendFormat": "Rate of failed requests (requests / second)",
@@ -2437,7 +2437,7 @@
         },
         {
           "exemplar": true,
-          "expr": "rate(ray_pinger_receiver_num_in_place_upgrade_requests_sent{ClusterId=~\"$ClusterId\"}[30s])",
+          "expr": "rate(ray_pinger_receiver_num_in_place_upgrade_requests_sent{ClusterId=~\"$ClusterId\", ServiceVersionName=~\"$ServiceVersionName\"}[30s])",
           "hide": false,
           "interval": "",
           "legendFormat": "Rate of in-place upgrade requests sent (requests / second)",
@@ -2445,7 +2445,7 @@
         },
         {
           "exemplar": true,
-          "expr": "rate(ray_pinger_receiver_upgrade_requests_failed{ClusterId=~\"$ClusterId\"}[30s])",
+          "expr": "rate(ray_pinger_receiver_upgrade_requests_failed{ClusterId=~\"$ClusterId\", ServiceVersionName=~\"$ServiceVersionName\"}[30s])",
           "hide": false,
           "interval": "",
           "legendFormat": "Rate of failed in-place upgrade requests",
@@ -2592,5 +2592,5 @@
   "timezone": "",
   "title": "Ray Serve Chaos Test",
   "uid": "pCWbEAE4k",
-  "version": 6
+  "version": 7
 }
