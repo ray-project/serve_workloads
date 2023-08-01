@@ -175,6 +175,17 @@ class Pinger(BaseReconfigurableDeployment):
                     try:
                         response = await task
                         status_code = response.status
+                        if status_code == 200:
+                            num_successful_requests += 1
+                        else:
+                            response_text = await response.text()
+                            print(
+                                f"{time.strftime('%b %d -- %l:%M%p: ')}"
+                                f"Got failed request: \n{response_text}"
+                            )
+                            self._count_failed_request(status_code, reason=response_text)
+                            self.fail_counter.inc(tags=metric_tags)
+                            self._increment_error_counter(status_code, tags=metric_tags)
                     except asyncio.TimeoutError as e:
                         self.request_timeout_error_counter.inc(tags=metric_tags)
                         self._count_failed_request(-2, reason="TimeoutError")
@@ -191,17 +202,6 @@ class Pinger(BaseReconfigurableDeployment):
                             f"{time.strftime('%b %d -- %l:%M%p: ')}"
                             f"Got exception from request: \n{repr(e)}"
                         )
-                    if status_code == 200:
-                        num_successful_requests += 1
-                    else:
-                        response_text = await response.text()
-                        print(
-                            f"{time.strftime('%b %d -- %l:%M%p: ')}"
-                            f"Got failed request: \n{response_text}"
-                        )
-                        self._count_failed_request(status_code, reason=response_text)
-                        self.fail_counter.inc(tags=metric_tags)
-                        self._increment_error_counter(status_code, tags=metric_tags)
 
                     if self.current_num_requests % (self.max_qps * 10) == 0:
                         print(
