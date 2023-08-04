@@ -183,7 +183,9 @@ class Pinger(BaseReconfigurableDeployment):
                                 f"{time.strftime('%b %d -- %l:%M%p: ')}"
                                 f"Got failed request: \n{response_text}"
                             )
-                            self._count_failed_request(status_code, reason=response_text)
+                            self._count_failed_request(
+                                status_code, reason=response_text
+                            )
                             self.fail_counter.inc(tags=metric_tags)
                             self._increment_error_counter(status_code, tags=metric_tags)
                     except asyncio.TimeoutError as e:
@@ -568,6 +570,7 @@ RECEIVER_HELMSMAN_OPTIONS = {
     "receiver_bearer_token": str,
     "cookie": str,
     "upgrade_interval_s": float,
+    "upgrade_types": list,
 }
 
 
@@ -598,6 +601,7 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
     def reconfigure(self, config: Dict):
         super().reconfigure(config)
         self._update_rest_api_urls()
+        self._create_upgrade_type_iter()
         self.stop()
         self.start()
 
@@ -607,16 +611,23 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
             await asyncio.sleep(5)
 
     async def run_upgrade_loop(self):
-        upgrade_type_iter = itertools.cycle(["IN_PLACE"])
         while True:
-            next_upgrade_type = next(upgrade_type_iter)
-            print(
-                f"{time.strftime('%b %d -- %l:%M%p: ')}Waiting "
-                f"{self.upgrade_interval_s} seconds before "
-                f"{next_upgrade_type} upgrading Receiver."
-            )
-            await asyncio.sleep(self.upgrade_interval_s)
-            self._upgrade_receiver(next_upgrade_type)
+            try:
+                next_upgrade_type = next(self.upgrade_type_iter)
+                print(
+                    f"{time.strftime('%b %d -- %l:%M%p: ')}Waiting "
+                    f"{self.upgrade_interval_s} seconds before "
+                    f"{next_upgrade_type} upgrading the Receiver."
+                )
+                await asyncio.sleep(self.upgrade_interval_s)
+                self._upgrade_receiver(next_upgrade_type)
+            except StopIteration:
+                print(
+                    f"{time.strftime('%b %d -- %l:%M%p: ')}No upgrade type "
+                    f"was specified. Waiting {self.upgrade_interval_s} "
+                    "before upgrading the Receiver."
+                )
+                await asyncio.sleep(self.upgrade_interval_s)
 
     async def run_disk_leaker_monitoring(self):
         while True:
@@ -722,6 +733,9 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
         self.update_put_url = (
             "https://console.anyscale-staging.com/api/v2/services-v2/apply"
         )
+
+    def _create_upgrade_type_iter(self):
+        self.upgrade_type_iter = itertools.cycle(self.upgrade_types)
 
     def _log_receiver_status(self):
         try:

@@ -54,5 +54,8 @@ applications:
       receiver_bearer_token: YOUR_RECEIVER_BEARER_TOKEN
       cookie: YOUR_COOKIE
       upgrade_interval_s: YOUR_UPDATE_INTERVAL_S
+      upgrade_types:
+      - IN_PLACE
+      - ROLLOUT
     ray_actor_options:
       num_cpus: 0
