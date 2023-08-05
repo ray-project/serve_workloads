@@ -9,7 +9,7 @@ from ray.serve.handle import RayServeHandle
 logger = logging.getLogger("ray.serve")
 
 
-@serve.deployment(max_concurrent_queries=10**10)
+@serve.deployment(max_concurrent_queries=10**9)
 class Forward:
     def __init__(self, handle: RayServeHandle):
         self.handle = handle
@@ -18,7 +18,7 @@ class Forward:
         return await (await self.handle.remote())
 
 
-@serve.deployment(max_concurrent_queries=10**10)
+@serve.deployment(max_concurrent_queries=10**9)
 class NoOp:
     def __call__(self, *args):
         return "No-op"
