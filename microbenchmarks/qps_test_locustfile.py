@@ -1,4 +1,12 @@
+from random import choice
+from string import printable
 from locust import FastHttpUser, task, constant, events
+
+
+def generate_random_string(size: int):
+    """Generate a string of length `size`."""
+
+    return "".join(choice(printable) for _ in range(size))
 
 
 @events.init_command_line_parser.add_listener
@@ -18,7 +26,7 @@ def _(parser):
 @events.test_start.add_listener
 def _(environment, **kw):
     payload_size: int = environment.parsed_options.payload_size
-    environment.payload = "0" * payload_size
+    environment.payload = generate_random_string(payload_size)
 
 
 class ConstantUser(FastHttpUser):
