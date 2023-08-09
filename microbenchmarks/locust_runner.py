@@ -25,6 +25,13 @@ parser.add_argument(
     type=str,
     help="HTML file to save results to.",
 )
+parser.add_argument(
+    "-t",
+    "--run-time",
+    default=None,
+    type=str,
+    help="Test duration. Same option as Locust's --run-time.",
+)
 
 args, locust_args = parser.parse_known_args()
 
@@ -92,5 +99,7 @@ master_locust_cmd = base_locust_cmd + [
     "--master",
     f"--expect-workers={num_locust_workers}",
 ]
+if args.run_time is not None:
+    master_locust_cmd += [f"--run-time={args.run_time}"]
 proc = subprocess.Popen(master_locust_cmd)
 proc.communicate()
