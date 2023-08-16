@@ -8,4 +8,4 @@ applications:
   args:
     num_forwards: 0
   runtime_env:
-    working_dir: https://github.com/ray-project/serve_workloads/archive/e9a239c6e44904f66f5f4571d8beb5fb8cd37843.zip
+    working_dir: https://github.com/ray-project/serve_workloads/archive/a2e2405f3117f1b4134b6924b5f44c4ff0710c00.zip
