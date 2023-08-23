@@ -14,7 +14,7 @@ import aiohttp
 from aiohttp import TraceConfig
 from aiohttp_retry import RetryClient, ExponentialRetry
 
-from chaos_test.constants import (
+from spot_chaos_test.constants import (
     RECEIVER_CONFIG_FILENAME,
     NODE_KILLER_KEY,
     DISK_LEAKER_KEY,
@@ -477,7 +477,7 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
         self._initialize_stats()
         self.receiver_config_template = self._parse_receiver_config_template()
         self.receiver_import_paths = itertools.cycle(
-            ["chaos_test.receiver:beta", "chaos_test.receiver:alpha"]
+            ["spot_chaos_test.receiver:beta", "spot_chaos_test.receiver:alpha"]
         )
         self.receiver_singleton_resource = itertools.cycle(
             ["beta_singleton", "alpha_singleton"]
