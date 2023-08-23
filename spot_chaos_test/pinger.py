@@ -519,27 +519,10 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
                 )
                 await asyncio.sleep(self.upgrade_interval_s)
 
-    async def run_disk_leaker_monitoring(self):
-        while True:
-            try:
-                json_payload = {DISK_LEAKER_KEY: "arbitrary"}
-                response = requests.post(
-                    self.receiver_url,
-                    headers={"Authorization": f"Bearer {self.receiver_bearer_token}"},
-                    json=json_payload,
-                    timeout=10,
-                )
-                self.num_writes_to_disk = int(response.text)
-                self.num_writes_to_disk_gauge.set(self.num_writes_to_disk)
-            except Exception as e:
-                print(f"Got exception when checking disk writes: {repr(e)}")
-            await asyncio.sleep(5 * 60)
-
     def start(self):
         task_methods = [
             self.run_status_check_loop,
             self.run_upgrade_loop,
-            self.run_disk_leaker_monitoring,
         ]
         if len(self.tasks) > 0:
             print(
