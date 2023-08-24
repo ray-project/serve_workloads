@@ -6,12 +6,9 @@ applications:
 
 - name: "default"
   route_prefix: "/"
-  import_path: chaos_test.pinger:graph
+  import_path: spot_chaos_test.pinger:graph
   runtime_env:
     working_dir: https://github.com/ray-project/serve_workloads/archive/8931755384dff5c9c721879b0e5f04525cf3665f.zip
-    env_vars:
-      RAY_SERVE_REQUEST_PROCESSING_TIMEOUT_S: '1'
-      RAY_SERVE_ENABLE_EXPERIMENTAL_STREAMING: '1'
   deployments:
   - name: Router
     num_replicas: 1

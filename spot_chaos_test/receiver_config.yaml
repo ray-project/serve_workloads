@@ -4,7 +4,7 @@ applications:
 
 - name: "default"
   route_prefix: "/"
-  import_path: chaos_test.receiver:alpha
+  import_path: spot_chaos_test.receiver:alpha
   runtime_env:
     working_dir: https://github.com/ray-project/serve_workloads/archive/8931755384dff5c9c721879b0e5f04525cf3665f.zip
   deployments:
