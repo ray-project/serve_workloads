@@ -6,7 +6,7 @@ applications:
   route_prefix: "/"
   import_path: spot_chaos_test.receiver:alpha
   runtime_env:
-    working_dir: https://github.com/ray-project/serve_workloads/archive/8931755384dff5c9c721879b0e5f04525cf3665f.zip
+    working_dir: https://github.com/ray-project/serve_workloads/archive/d130a5c6f76c145e124df3d21b2a3b11d97414dd.zip
   deployments:
   - name: Receiver
     num_replicas: 3
