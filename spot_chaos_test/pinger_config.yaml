@@ -8,7 +8,7 @@ applications:
   route_prefix: "/"
   import_path: spot_chaos_test.pinger:graph
   runtime_env:
-    working_dir: https://github.com/ray-project/serve_workloads/archive/d130a5c6f76c145e124df3d21b2a3b11d97414dd.zip
+    working_dir: https://github.com/ray-project/serve_workloads/archive/47075f7a226d05ae62da73cdc6e19ef1d6e9984e.zip
   deployments:
   - name: Router
     num_replicas: 1
