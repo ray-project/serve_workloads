@@ -1,18 +1,25 @@
-
+import logging
 from typing import Tuple
 
-from starlette.requests import Request
+from fastapi import FastAPI, UploadFile
 
 from ray import serve
 from ray.serve.handle import RayServeHandle
 
 
-@serve.deployment(ray_actor_options={"num_gpus": 1})
-class ProblemReader:
+logger = logging.getLogger("ray.serve")
 
+
+fastapi_app = FastAPI()
+
+
+@serve.deployment(ray_actor_options={"num_gpus": 1})
+@serve.ingress(fastapi_app)
+class ProblemReader:
     def __init__(self, solver_handle: RayServeHandle):
         # Suppress TensorFlow and HuggingFace warnings
         import os
+
         os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
         os.environ["TRANSFORMERS_VERBOSITY"] = "error"
 
@@ -24,41 +31,54 @@ class ProblemReader:
         self.model.eval()
 
         self.solver_handle = solver_handle
-    
-    async def __call__(self, request: Request) -> str:
-        import io
+
+    @fastapi_app.post("/")
+    async def process_image(self, image_file: UploadFile) -> Tuple[str, float]:
         import torch
-        import base64
         from PIL import Image
 
-        image_bytes_utf8 = (await request.json())["image_bytes_utf8"]
-        image_bytes = base64.b64decode(image_bytes_utf8.encode("utf-8"))
+        logger.info(f"Received file: {image_file.filename}")
 
-        image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
+        image = Image.open(image_file.file).convert("RGB")
 
         with torch.no_grad():
-            pixel_values = self.processor(image, return_tensors="pt").pixel_values.cuda()
+            pixel_values = self.processor(
+                image, return_tensors="pt"
+            ).pixel_values.cuda()
             generated_ids = self.model.generate(pixel_values)
-            generated_text = self.processor.batch_decode(generated_ids, skip_special_tokens=True)[0]
+            generated_text = self.processor.batch_decode(
+                generated_ids, skip_special_tokens=True
+            )[0]
+
+            logger.info(f"Generated text: {generated_text}")
 
             return await (await self.solver_handle.remote(generated_text))
 
 
 @serve.deployment
 class ProblemSolver:
-
     def __init__(self):
-        from sympy.parsing.sympy_parser import standard_transformations, implicit_multiplication_application
-        self.transformations = standard_transformations + (implicit_multiplication_application, )
-    
+        from sympy.parsing.sympy_parser import (
+            standard_transformations,
+            implicit_multiplication_application,
+        )
+
+        self.transformations = standard_transformations + (
+            implicit_multiplication_application,
+        )
+
     def __call__(self, problem: str) -> Tuple[str, float]:
         from sympy.solvers import solve_linear
         from sympy.parsing.sympy_parser import parse_expr
 
         lhs_str, rhs_str = problem.split("=")
 
-        lhs_expr = parse_expr(lhs_str, transformations=self.transformations, evaluate=False)
-        rhs_expr = parse_expr(rhs_str, transformations=self.transformations, evaluate=False)
+        lhs_expr = parse_expr(
+            lhs_str, transformations=self.transformations, evaluate=False
+        )
+        rhs_expr = parse_expr(
+            rhs_str, transformations=self.transformations, evaluate=False
+        )
 
         symbol, value = solve_linear(lhs=lhs_expr, rhs=rhs_expr)
         return str(symbol), float(value)
