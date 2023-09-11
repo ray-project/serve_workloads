@@ -2,7 +2,7 @@
 FROM rayproject/ray-ml:2.6.3-py39-gpu
 
 # Install curl
-RUN apt-get update && apt-get install -y curl
+RUN sudo apt-get update && sudo apt-get install -y curl
 
 # Install required dependencies
 RUN pip install python-multipart==0.0.6
