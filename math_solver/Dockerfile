@@ -1,5 +1,5 @@
 # Dockerfile for calculator apps
-FROM rayproject/ray:2.6.3-py39-gpu
+FROM rayproject/ray-ml:2.6.3-py39-gpu
 
 # Install curl
 RUN apt-get update && apt-get install -y curl
