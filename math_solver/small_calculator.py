@@ -26,6 +26,9 @@ class ProblemOrchestrator:
 
     @fastapi_app.post("/")
     async def process_image(self, image_file: UploadFile) -> Tuple[str, float]:
+
+        logger.info(f"Received file: {image_file.filename}")
+
         problem_text = await (await self.reader_handle.remote(image_file))
         symbol, value = await (await self.solver_handle.remote(problem_text))
         return symbol, value
