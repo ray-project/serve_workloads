@@ -13,10 +13,27 @@ logger = logging.getLogger("ray.serve")
 fastapi_app = FastAPI()
 
 
-@serve.deployment(ray_actor_options={"num_gpus": 1})
+@serve.deployment(ray_actor_options={"num_cpus": 0})
 @serve.ingress(fastapi_app)
+class ProblemOrchestrator:
+    def __init__(
+        self,
+        reader_handle: RayServeHandle,
+        solver_handle: RayServeHandle,
+    ):
+        self.reader_handle = reader_handle
+        self.solver_handle = solver_handle
+
+    @fastapi_app.post("/")
+    async def process_image(self, image_file: UploadFile) -> Tuple[str, float]:
+        problem_text = await (await self.reader_handle.remote(image_file))
+        symbol, value = await (await self.solver_handle.remote(problem_text))
+        return symbol, value
+
+
+@serve.deployment(ray_actor_options={"num_gpus": 1})
 class ProblemReader:
-    def __init__(self, solver_handle: RayServeHandle):
+    def __init__(self):
         # Suppress TensorFlow and HuggingFace warnings
         import os
 
@@ -30,10 +47,7 @@ class ProblemReader:
         self.model = VisionEncoderDecoderModel.from_pretrained(self.MODEL_ID).cuda()
         self.model.eval()
 
-        self.solver_handle = solver_handle
-
-    @fastapi_app.post("/")
-    async def process_image(self, image_file: UploadFile) -> Tuple[str, float]:
+    async def __call__(self, image_file: UploadFile) -> str:
         import torch
         from PIL import Image
 
@@ -52,7 +66,7 @@ class ProblemReader:
 
             logger.info(f"Generated text: {generated_text}")
 
-            return await (await self.solver_handle.remote(generated_text))
+            return generated_text
 
 
 @serve.deployment
@@ -84,4 +98,4 @@ class ProblemSolver:
         return str(symbol), float(value)
 
 
-app = ProblemReader.bind(ProblemSolver.bind())
+app = ProblemOrchestrator.bind(ProblemReader.bind(), ProblemSolver.bind())
