@@ -15,7 +15,7 @@ import argparse
 import subprocess
 from tqdm import tqdm
 
-HTML_RESULTS_DIR = "locust_results"
+HTML_RESULTS_DIR = os.environ.get("HTML_RESULTS_DIR", "locust_results")
 DEFAULT_RESULT_FILENAME = f"{time.strftime('%Y-%m-%d-%p-%H-%M-%S-results.html')}"
 
 parser = argparse.ArgumentParser()
