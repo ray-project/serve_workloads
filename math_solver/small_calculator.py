@@ -13,30 +13,10 @@ logger = logging.getLogger("ray.serve")
 fastapi_app = FastAPI()
 
 
-@serve.deployment(ray_actor_options={"num_cpus": 0})
-@serve.ingress(fastapi_app)
-class ProblemOrchestrator:
-    def __init__(
-        self,
-        reader_handle: RayServeHandle,
-        solver_handle: RayServeHandle,
-    ):
-        self.reader_handle = reader_handle
-        self.solver_handle = solver_handle
-
-    @fastapi_app.post("/")
-    async def process_image(self, image_file: UploadFile) -> Tuple[str, float]:
-
-        logger.info(f"Received file: {image_file.filename}")
-
-        problem_text = await (await self.reader_handle.remote(image_file))
-        symbol, value = await (await self.solver_handle.remote(problem_text))
-        return symbol, value
-
-
 @serve.deployment(ray_actor_options={"num_gpus": 1})
+@serve.ingress(fastapi_app)
 class ProblemReader:
-    def __init__(self):
+    def __init__(self, solver_handle: RayServeHandle):
         # Suppress TensorFlow and HuggingFace warnings
         import os
 
@@ -50,7 +30,10 @@ class ProblemReader:
         self.model = VisionEncoderDecoderModel.from_pretrained(self.MODEL_ID).cuda()
         self.model.eval()
 
-    async def __call__(self, image_file: UploadFile) -> str:
+        self.solver_handle = solver_handle
+
+    @fastapi_app.post("/")
+    async def process_image(self, image_file: UploadFile) -> Tuple[str, float]:
         import torch
         from PIL import Image
 
@@ -69,7 +52,8 @@ class ProblemReader:
 
             logger.info(f"Generated text: {generated_text}")
 
-            return generated_text
+        symbol, value = await (await self.solver_handle.remote(generated_text))
+        return symbol, value
 
 
 @serve.deployment
@@ -88,6 +72,8 @@ class ProblemSolver:
         from sympy.solvers import solve_linear
         from sympy.parsing.sympy_parser import parse_expr
 
+        logger.info(f"Received expression: {problem}")
+
         lhs_str, rhs_str = problem.split("=")
 
         lhs_expr = parse_expr(
@@ -101,4 +87,4 @@ class ProblemSolver:
         return str(symbol), float(value)
 
 
-app = ProblemOrchestrator.bind(ProblemReader.bind(), ProblemSolver.bind())
+app = ProblemReader.bind(ProblemSolver.bind())
