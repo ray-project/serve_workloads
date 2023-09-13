@@ -1,6 +1,7 @@
 from random import choice
 from string import printable
 from locust import FastHttpUser, task, constant, events
+import os
 
 
 def generate_random_string(size: int):
@@ -30,7 +31,7 @@ def _(environment, **kw):
 
 
 class ConstantUser(FastHttpUser):
-    wait_time = constant(0)
+    wait_time = constant(float(os.environ.get("LOCUS_WAIT_TIME", "0")))
     network_timeout = None
     connection_timeout = None
 
