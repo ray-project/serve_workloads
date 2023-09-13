@@ -15,6 +15,11 @@ RUN pip install locust==2.16.1
 COPY model_downloader.py .
 RUN python model_downloader.py
 
+# Install grpcurl
+RUN wget https://github.com/fullstorydev/grpcurl/releases/download/v1.8.7/grpcurl_1.8.7_linux_x86_64.tar.gz
+RUN tar -xvf grpcurl_1.8.7_linux_x86_64.tar.gz
+RUN sudo chmod +x grpcurl
+
 # Copy Serve files to working directory
 COPY small_calculator.py .
 COPY base_calculator.py .
