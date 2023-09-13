@@ -24,6 +24,9 @@ RUN sudo chmod +x grpcurl
 COPY small_calculator.py .
 COPY base_calculator.py .
 
+# Copy node preemption helper script
+COPY preempt_node.py .
+
 # Copy helfpul debugging files to working directory
 COPY calculator_client.py .
 COPY constant_load.py .
