@@ -8,7 +8,7 @@ applications:
   route_prefix: "/"
   import_path: chaos_test.pinger:graph
   runtime_env:
-    working_dir: https://github.com/ray-project/serve_workloads/archive/f621f30f06e886a8cad9b700814aa48b0537c10c.zip
+    working_dir: https://github.com/ray-project/serve_workloads/archive/6c68d8c3861c7d55b51b303e6cbb6f2255f7ba7f.zip
     env_vars:
       RAY_SERVE_REQUEST_PROCESSING_TIMEOUT_S: '1'
       RAY_SERVE_ENABLE_EXPERIMENTAL_STREAMING: '1'
