@@ -16,7 +16,7 @@ applications:
     ray_actor_options:
       num_cpus: 0
       resources:
-        node_singleton: 1
+        alpha_singleton: 1
   - name: NodeKiller
     num_replicas: 1
     ray_actor_options:
