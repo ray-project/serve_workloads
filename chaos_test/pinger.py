@@ -153,15 +153,22 @@ class Pinger(BaseReconfigurableDeployment):
             while True:
                 start_time = asyncio.get_event_loop().time()
 
-                self.pending_requests.add(
-                    self._make_request(
-                        client=client,
-                        target_url=self.url,
-                        target_bearer_token=self.bearer_token,
-                        payload=payload,
-                        tags=metric_tags,
+                if self.num_pending_requests < 2.5 * self.max_qps:
+                    self.pending_requests.add(
+                        self._make_request(
+                            client=client,
+                            target_url=self.url,
+                            target_bearer_token=self.bearer_token,
+                            payload=payload,
+                            tags=metric_tags,
+                        )
                     )
-                )
+                else:
+                    print(
+                        f"Already have {self.num_pending_requests} pendings "
+                        "requests. No more will be sent until some of these "
+                        "finish."
+                    )
 
                 done, pending = await asyncio.wait(self.pending_requests, timeout=0)
                 self.pending_requests = pending
