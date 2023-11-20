@@ -57,6 +57,6 @@ applications:
       upgrade_types:
       - IN_PLACE
       - ROLLOUT
-      base_anyscale_url: https://console.anyscale-staging.com
+      base_anyscale_url: YOUR_BASE_ANYSCALE_URL
     ray_actor_options:
       num_cpus: 0
