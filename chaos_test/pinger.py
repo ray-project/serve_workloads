@@ -578,6 +578,7 @@ RECEIVER_HELMSMAN_OPTIONS = {
     "cookie": str,
     "upgrade_interval_s": float,
     "upgrade_types": list,
+    "base_anyscale_url": str,
 }
 
 
@@ -736,10 +737,8 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
         self.num_writes_to_disk = 0
 
     def _update_rest_api_urls(self):
-        self.status_get_url = f"https://console.anyscale-staging.com/api/v2/services-v2/{self.receiver_service_id}"
-        self.update_put_url = (
-            "https://console.anyscale-staging.com/api/v2/services-v2/apply"
-        )
+        self.status_get_url = f"{self.base_anyscale_url}/api/v2/services-v2/{self.receiver_service_id}"
+        self.update_put_url = f"{self.base_anyscale_url}/api/v2/services-v2/apply"
 
     def _create_upgrade_type_iter(self):
         self.upgrade_type_iter = itertools.cycle(self.upgrade_types)
