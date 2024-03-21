@@ -1,5 +1,9 @@
 proxy_location: EveryNode
 
+http_options:
+  request_timeout_s: 1
+  keep_alive_timeout_s: 400
+
 applications:
 
 - name: "default"
@@ -7,9 +11,6 @@ applications:
   import_path: chaos_test.receiver:alpha
   runtime_env:
     working_dir: https://github.com/ray-project/serve_workloads/archive/c212ada8ffae666679e54d860bcd88caf62739c8.zip
-    env_vars:
-      RAY_SERVE_REQUEST_PROCESSING_TIMEOUT_S: '1'
-      RAY_SERVE_ENABLE_EXPERIMENTAL_STREAMING: '1'
   deployments:
   - name: Receiver
     num_replicas: 3

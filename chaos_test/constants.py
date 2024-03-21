@@ -34,4 +34,17 @@ class ServiceStatus(str, Enum):
     ROLLINGBACK = "Rolling back"
 
 
+ACTIVE_SERVICE_STATUSES = [
+    "RUNNING",
+    "UNHEALTHY",
+    "SYSTEM_FAILURE",
+    "USER_ERROR_FAILURE",
+    "STARTING",
+    "UPDATING",
+    "ROLLING_OUT",
+    "ROLLING_BACK",
+]
+
+
+PINGER_CONFIG_FILENAME = "pinger_config.yaml"
 RECEIVER_CONFIG_FILENAME = "receiver_config.yaml"

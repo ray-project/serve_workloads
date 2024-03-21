@@ -1,17 +1,30 @@
-# Make sure to fill in your receiver_url and bearer_token. See README.
-
 proxy_location: EveryNode
+
+http_options:
+  request_timeout_s: 1
+  keep_alive_timeout_s: 400
 
 applications:
 
 - name: "default"
   route_prefix: "/"
-  import_path: chaos_test.pinger:graph
+  import_path: chaos_test.pinger:app_builder
   runtime_env:
     working_dir: https://github.com/ray-project/serve_workloads/archive/c212ada8ffae666679e54d860bcd88caf62739c8.zip
-    env_vars:
-      RAY_SERVE_REQUEST_PROCESSING_TIMEOUT_S: '1'
-      RAY_SERVE_ENABLE_EXPERIMENTAL_STREAMING: '1'
+
+  args:
+    receiver_service_name: YOUR_RECEIVER_SERVICE_NAME
+    receiver_build_id: YOUR_RECEIVER_BUILD_ID
+    receiver_compute_config_id: YOUR_RECEIVER_COMPUTE_CONFIG_ID
+    receiver_gcs_external_storage_config: YOUR_RECEIVER_GCS_EXTERNAL_STORAGE_CONFIG
+    pinger_service_name: YOUR_PINGER_SERVICE_NAME
+    project_id: YOUR_PROJECT_ID
+    receiver_qps: YOUR_RECEIVER_QPS
+    pinger_qps: YOUR_PINGER_QPS
+    kill_interval_s: YOUR_KILL_INTERVAL_S
+    upgrade_interval_s: YOUR_UPGRADE_INTERVAL_S
+    upgrade_types: List[str] = ["IN_PLACE", "ROLLOUT"]
+
   deployments:
   - name: Router
     num_replicas: 1
@@ -19,44 +32,17 @@ applications:
       num_cpus: 0
   - name: receiver_Pinger
     num_replicas: 1
-    user_config:
-      url: YOUR_RECEIVER_URL
-      bearer_token: YOUR_RECEIVER_BEARER_TOKEN
-      max_qps: 100
     ray_actor_options:
       num_cpus: 0
   - name: self_Pinger
     num_replicas: 1
-    user_config:
-      url: YOUR_PINGER_URL
-      bearer_token: YOUR_PINGER_BEARER_TOKEN
-      max_qps: 100
     ray_actor_options:
       num_cpus: 0
   - name: Reaper
     num_replicas: 1
-    user_config:
-      receiver_url: YOUR_RECEIVER_URL
-      receiver_bearer_token: YOUR_RECEIVER_BEARER_TOKEN
-      kill_interval_s: 300
     ray_actor_options:
       num_cpus: 0
   - name: ReceiverHelmsman
     num_replicas: 1
-    user_config:
-      project_id: YOUR_PROJECT_ID
-      receiver_service_name: YOUR_RECEIVER_NAME
-      receiver_service_id: YOUR_RECEIVER_SERVICE_ID
-      receiver_build_id: YOUR_RECEIVER_BUILD_ID
-      receiver_compute_config_id: YOUR_RECEIVER_COMPUTE_CONFIG_ID
-      receiver_gcs_external_storage_config: YOUR_RECEIVER_GCS_EXTERNAL_STORAGE_CONFIG
-      receiver_url: YOUR_RECEIVER_URL
-      receiver_bearer_token: YOUR_RECEIVER_BEARER_TOKEN
-      cookie: YOUR_COOKIE
-      upgrade_interval_s: YOUR_UPDATE_INTERVAL_S
-      upgrade_types:
-      - IN_PLACE
-      - ROLLOUT
-      base_anyscale_url: YOUR_BASE_ANYSCALE_URL
     ray_actor_options:
       num_cpus: 0
