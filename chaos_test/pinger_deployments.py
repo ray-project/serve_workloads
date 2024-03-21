@@ -779,6 +779,7 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
                 compute_config_id=self.receiver_compute_config_id,
                 ray_serve_config=self.receiver_config_template,
                 ray_gcs_external_storage_config=self.receiver_gcs_external_storage_config,
+                rollout_strategy=upgrade_type,
             )
 
             print(
