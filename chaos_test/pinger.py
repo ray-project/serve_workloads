@@ -65,7 +65,7 @@ def wait_for_service_in_state(
     timeout_s: int = 1200,
 ):
     wait_start, last_log_time = time.time(), time.time()
-    while time.time() - wait_start < timeout_s and curr_state != expected_state:
+    while time.time() - wait_start < timeout_s:
         curr_state = sdk.get_service(service_id).result.current_state
 
         if curr_state == expected_state:
