@@ -1,7 +1,5 @@
 import sys
 import time
-import json
-import yaml
 import asyncio
 import requests
 import itertools
@@ -15,7 +13,6 @@ from aiohttp import TraceConfig
 from aiohttp_retry import RetryClient, ExponentialRetry
 
 from chaos_test.constants import (
-    RECEIVER_CONFIG_FILENAME,
     NODE_KILLER_KEY,
     DISK_LEAKER_KEY,
     KillOptions,
@@ -31,7 +28,6 @@ from ray._private.utils import run_background_task
 from anyscale.sdk.anyscale_client.sdk import AnyscaleSDK
 from anyscale.sdk.anyscale_client.models import (
     ApplyServiceModel,
-    ServiceEventCurrentState,
     ServiceModel,
 )
 
@@ -598,7 +594,7 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
         self.tasks = []
         self._initialize_metrics()
         self._initialize_stats()
-        self.receiver_config_template = get_receiver_serve_config()
+        self.receiver_config_template = get_receiver_serve_config(str(Path(__file__).parent))
         self.receiver_import_paths = itertools.cycle(
             ["chaos_test.receiver:beta", "chaos_test.receiver:alpha"]
         )

@@ -1,4 +1,5 @@
 import time
+from pathlib import Path
 from pydantic import BaseModel
 from typing import Dict, List
 
@@ -130,7 +131,7 @@ def ensure_receiver_started(
             project_id=project_id,
             build_id=receiver_build_id,
             compute_config_id=receiver_compute_config_id,
-            ray_serve_config=get_receiver_serve_config(),
+            ray_serve_config=get_receiver_serve_config(str(Path(__file__).parent)),
             ray_gcs_external_storage_config=receiver_gcs_external_storage_config,
         )
         receiver_service_model: ServiceModel = sdk.rollout_service(service_config)

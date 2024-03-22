@@ -50,15 +50,19 @@ class BaseReconfigurableDeployment:
                 setattr(self, option, new_value)
 
 
-def get_receiver_serve_config() -> Dict:
-    """Gets the Serve config for the Receiver application."""
+def get_receiver_serve_config(receiver_serve_config_dir: str) -> Dict:
+    """Gets the Serve config for the Receiver application.
+    
+    Args:
+        receiver_serve_config_dir: directory that contains the Receiver's
+            Serve config.
+    """
 
-    cur_dir = str(Path(__file__).parent)
     aliased_path_prefix = "/tmp/ray/session_latest/runtime_resources"
-    aliased_dir = aliased_path_prefix + cur_dir.split("runtime_resources")[1]
+    aliased_dir = aliased_path_prefix + receiver_serve_config_dir.split("runtime_resources")[1]
     receiver_config_file_path = f"{aliased_dir}/{RECEIVER_CONFIG_FILENAME}"
     print(f'Using Receiver config at "{receiver_config_file_path}"')
     with open(receiver_config_file_path) as f:
-        receiver_config_template = yaml.safe_load(f)
+        receiver_serve_config = yaml.safe_load(f)
 
-    return receiver_config_template
+    return receiver_serve_config
