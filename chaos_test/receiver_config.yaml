@@ -10,7 +10,7 @@ applications:
   route_prefix: "/"
   import_path: chaos_test.receiver:alpha
   runtime_env:
-    working_dir: https://github.com/ray-project/serve_workloads/archive/21f6d13a0dd4b7d2c8653b164c455cb11babdcf8.zip
+    working_dir: https://github.com/ray-project/serve_workloads/archive/2675879e834eb2abe9db3dadff034255bb33c03a.zip
   deployments:
   - name: Receiver
     num_replicas: 3
