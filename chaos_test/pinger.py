@@ -135,18 +135,18 @@ def start_receiver_service(
             expected_state=ServiceEventCurrentState.TERMINATED,
             timeout_s=1200,
         )
-    else:
-        logger.info("Receiver service doesn't yet exist. Starting one.")
-        service_config = ApplyServiceModel(
-            name=receiver_service_name,
-            project_id=project_id,
-            build_id=receiver_build_id,
-            compute_config_id=receiver_compute_config_id,
-            ray_serve_config=get_receiver_serve_config(str(Path(__file__).parent)),
-            ray_gcs_external_storage_config=receiver_gcs_external_storage_config,
-        )
-        receiver_service_model: ServiceModel = sdk.rollout_service(service_config)
-        receiver_service_id = receiver_service_model.id
+
+    logger.info("Starting the Receiver service.")
+    service_config = ApplyServiceModel(
+        name=receiver_service_name,
+        project_id=project_id,
+        build_id=receiver_build_id,
+        compute_config_id=receiver_compute_config_id,
+        ray_serve_config=get_receiver_serve_config(str(Path(__file__).parent)),
+        ray_gcs_external_storage_config=receiver_gcs_external_storage_config,
+    )
+    receiver_service_model: ServiceModel = sdk.rollout_service(service_config)
+    receiver_service_id = receiver_service_model.id
     
     # Wait for the Receiver service to start running.
     wait_for_service_in_state(
