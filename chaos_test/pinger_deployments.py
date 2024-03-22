@@ -608,11 +608,11 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
         self.latest_receiver_upgrade_type = None
 
         self.sdk: AnyscaleSDK = create_anyscale_sdk()
-        self.receiver_service_id = self._get_receiver_service_id()
 
     def reconfigure(self, config: Dict):
         super().reconfigure(config)
         self._create_upgrade_type_iter()
+        self.receiver_service_id = self._get_receiver_service_id()
         self.stop()
         self.start()
 
