@@ -91,7 +91,7 @@ def wait_for_service_in_state(
     logger.info(f"The Receiver service {service_id} has started running.")
 
 
-def ensure_receiver_started(
+def start_receiver_service(
     sdk: AnyscaleSDK,
     receiver_service_name: str,
     receiver_build_id: str,
@@ -99,9 +99,9 @@ def ensure_receiver_started(
     receiver_gcs_external_storage_config: Dict,
     project_id: str,
 ):
-    """Ensures that the Receiver service has started.
-    
-    Starts the Receiver service if it hasn't started yet.
+    """Starts the Receiver service.
+
+    Terminates the existing Receiver service if it's currently running.
 
     Args:
         receiver_service_name: The name of the Receiver service.
@@ -125,9 +125,16 @@ def ensure_receiver_started(
             "Expected only 0 or 1."
         )
     elif len(service_models) == 1:
-        logger.info("Receiver service already exists.")
+        logger.info("A Receiver service already exists. Terminating it.")
         receiver_service_model: ServiceModel = service_models[0]
         receiver_service_id = receiver_service_model.id
+        sdk.terminate_service(receiver_service_id)
+        wait_for_service_in_state(
+            sdk=sdk,
+            service_id=receiver_service_id,
+            expected_state=ServiceEventCurrentState.TERMINATED,
+            timeout_s=1200,
+        )
     else:
         logger.info("Receiver service doesn't yet exist. Starting one.")
         service_config = ApplyServiceModel(
@@ -158,7 +165,7 @@ def app_builder(args: PingerArgs) -> Application:
 
     sdk = create_anyscale_sdk()
 
-    ensure_receiver_started(
+    start_receiver_service(
         sdk=sdk,
         receiver_service_name=args.receiver_service_name,
         receiver_build_id=args.receiver_build_id,
