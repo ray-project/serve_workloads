@@ -1,7 +1,7 @@
 proxy_location: EveryNode
 
 http_options:
-  request_timeout_s: 1
+  request_timeout_s: -1
   keep_alive_timeout_s: 400
 
 applications:
