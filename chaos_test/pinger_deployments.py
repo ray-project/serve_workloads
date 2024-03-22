@@ -10,6 +10,7 @@ from typing import Dict, Optional
 
 import aiohttp
 from aiohttp import TraceConfig
+from aiohttp.client_exceptions import ClientOSError
 from aiohttp_retry import RetryClient, ExponentialRetry
 
 from chaos_test.constants import (
@@ -424,7 +425,15 @@ class Pinger(BaseReconfigurableDeployment):
                 attempts=max_attempts,
                 start_timeout=1,
                 factor=2,
-                exceptions=[asyncio.TimeoutError, aiohttp.ServerDisconnectedError],
+                exceptions=[
+                    asyncio.TimeoutError,
+                    aiohttp.ServerDisconnectedError,
+
+                    # See https://github.com/aio-libs/aiohttp/issues/6138.
+                    # aiohttp sometimes raises a ClientOSError when writing
+                    # many queries. We can ignore this failure and retry.
+                    ClientOSError,
+                ],
             ),
             trace_configs=[trace_config],
         )
