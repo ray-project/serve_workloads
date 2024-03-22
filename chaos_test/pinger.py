@@ -145,7 +145,7 @@ def start_receiver_service(
         ray_serve_config=get_receiver_serve_config(str(Path(__file__).parent)),
         ray_gcs_external_storage_config=receiver_gcs_external_storage_config,
     )
-    receiver_service_model: ServiceModel = sdk.rollout_service(service_config)
+    receiver_service_model: ServiceModel = sdk.rollout_service(service_config).result
     receiver_service_id = receiver_service_model.id
     
     # Wait for the Receiver service to start running.
