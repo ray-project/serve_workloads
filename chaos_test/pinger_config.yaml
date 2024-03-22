@@ -10,7 +10,7 @@ applications:
   route_prefix: "/"
   import_path: chaos_test.pinger:app_builder
   runtime_env:
-    working_dir: https://github.com/ray-project/serve_workloads/archive/2675879e834eb2abe9db3dadff034255bb33c03a.zip
+    working_dir: https://github.com/ray-project/serve_workloads/archive/47a3446666303a322291a78b7aad125f7eca293c.zip
 
   args:
     receiver_service_name: YOUR_RECEIVER_SERVICE_NAME
