@@ -42,31 +42,21 @@ class Receiver:
         request_json = await request.json()
         if DISK_LEAKER_KEY in request_json:
             logger.info("Received disk leaker info request.")
-            return await (await self.disk_leaker_handle.info.remote())
+            return await self.disk_leaker_handle.info.remote()
         kill_node = request_json.get(NODE_KILLER_KEY, KillOptions.SPARE)
         if kill_node == KillOptions.RAY_STOP:
             logger.info(
                 "Received ray stop request. Attempting to kill a node."
             )
             await asyncio.wait(
-                [
-                    asyncio.wait(
-                        [self.node_killer_handle.ray_stop_node.remote()], timeout=10
-                    )
-                ],
-                timeout=10,
+                [self.node_killer_handle.ray_stop_node.remote()], timeout=10
             )
         elif kill_node == KillOptions.NODE_HALT:
             logger.info(
                 "Received node halt request. Attempting to kill a node."
             )
             await asyncio.wait(
-                [
-                    asyncio.wait(
-                        [self.node_killer_handle.halt_node.remote()], timeout=10
-                    )
-                ],
-                timeout=10,
+                [self.node_killer_handle.halt_node.remote()], timeout=10
             )
         return f"(PID: {os.getpid()}) {self.name} Receiver running!"
 
