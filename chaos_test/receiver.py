@@ -14,6 +14,7 @@ from ray import serve
 from ray._private.utils import run_background_task
 from ray.experimental.state.api import list_actors
 
+
 logger = logging.getLogger("ray.serve")
 
 
@@ -33,18 +34,20 @@ class Receiver:
         self.name = name
         self.node_killer_handle = node_killer_handle
         self.disk_leaker_handle = disk_leaker_handle
-        print(
+        logger.info(
             f"Receiver actor starting on node {ray.get_runtime_context().get_node_id()}"
         )
 
     async def __call__(self, request: Request):
         request_json = await request.json()
         if DISK_LEAKER_KEY in request_json:
-            print("Received disk leaker info request.")
+            logger.info("Received disk leaker info request.")
             return await (await self.disk_leaker_handle.info.remote())
         kill_node = request_json.get(NODE_KILLER_KEY, KillOptions.SPARE)
         if kill_node == KillOptions.RAY_STOP:
-            print("Received ray stop request. Attempting to kill a node.")
+            logger.info(
+                "Received ray stop request. Attempting to kill a node."
+            )
             await asyncio.wait(
                 [
                     asyncio.wait(
@@ -54,7 +57,9 @@ class Receiver:
                 timeout=10,
             )
         elif kill_node == KillOptions.NODE_HALT:
-            print("Received node halt request. Attempting to kill a node.")
+            logger.info(
+                "Received node halt request. Attempting to kill a node."
+            )
             await asyncio.wait(
                 [
                     asyncio.wait(
@@ -79,20 +84,20 @@ class NodeKiller:
     def ray_stop_node(self):
         try:
             actors = list_actors(filters=[("state", "=", "ALIVE")], timeout=3)
-            print(f"Actor summary:\n{json.dumps(actors, indent=4)}")
-        except Exception as e:
-            print(f"Failed to get actor info. Got exception\n{e}")
-        print(f"Killing node {ray.get_runtime_context().get_node_id()}")
+            logger.info(f"Actor summary:\n{json.dumps(actors, indent=4)}")
+        except Exception:
+            logger.exception(f"Failed to get actor info.")
+        logger.info(f"Killing node {ray.get_runtime_context().get_node_id()}")
         subprocess.call(["ray", "stop", "-f"])
         return ""
 
     def halt_node(self):
         try:
             actors = list_actors(filters=[("state", "=", "ALIVE")], timeout=3)
-            print(f"Actor summary:\n{json.dumps(actors, indent=4)}")
-        except Exception as e:
-            print(f"Failed to get actor info. Got exception\n{e}")
-        print(f"Killing node {ray.get_runtime_context().get_node_id()}")
+            logger.info(f"Actor summary:\n{json.dumps(actors, indent=4)}")
+        except Exception:
+            logger.exception(f"Failed to get actor info.")
+        logger.info(f"Killing node {ray.get_runtime_context().get_node_id()}")
         subprocess.call(["sudo", "halt", "--force"])
         return ""
 
@@ -112,14 +117,14 @@ class DiskLeaker:
         self.leak_file_name = "leak_file.log"
         self.num_writes_to_disk = 0
         self.num_GB = 10
-        print(f"num_GB set to {self.num_GB}")
+        logger.info(f"num_GB set to {self.num_GB}")
         os.makedirs(self.leak_dir, exist_ok=True)
         run_background_task(self.leak())
 
     def reconfigure(self, config: Dict) -> None:
         if "num_GB" in config:
             self.num_GB = int(config["num_GB"])
-            print(f"num_GB set to {self.num_GB}")
+            logger.info(f"num_GB set to {self.num_GB}")
 
     def info(self):
         return self.num_writes_to_disk
@@ -132,9 +137,8 @@ class DiskLeaker:
 
         for _ in range(time_period_m):
             write_start_time = time.time()
-            print(
-                f"{time.strftime('%b %d -- %l:%M%p: ')}Writing roughly "
-                f"{self.num_GB / time_period_m}GB to log."
+            logger.info(
+                f"Writing roughly {self.num_GB / time_period_m}GB to log."
             )
             num_chars_to_write = int((self.num_GB / time_period_m) * GB)
             logger.info("0" * num_chars_to_write)
@@ -150,7 +154,10 @@ class DiskLeaker:
                 file_write_duration_s = time.time() - file_write_start_time
                 self.num_writes_to_disk += 1
                 sleep_time = max(0, num_hours * hours - file_write_duration_s)
-                print(f"Waiting {(sleep_time / hours):.2f} hours before writing again.")
+                logger.info(
+                    f"Waiting {(sleep_time / hours):.2f} hours "
+                    "before writing again."
+                )
                 await asyncio.sleep(sleep_time)
             else:
                 await asyncio.sleep(num_hours * hours)

@@ -1,4 +1,5 @@
 import time
+import logging
 from pathlib import Path
 from pydantic import BaseModel
 from typing import Dict, List
@@ -25,6 +26,9 @@ from chaos_test.pinger_deployments import (
 
 from utilities.anyscale_sdk_utils import create_anyscale_sdk, get_service_model
 from utilities.deployment_utils import get_receiver_serve_config
+
+
+logger = logging.getLogger("ray.serve")
 
 
 class PingerArgs(BaseModel):
@@ -72,7 +76,7 @@ def wait_for_service_in_state(
             break
         elif time.time() - last_log_time >= 10:
             # Log the current state every 10s.
-            print(
+            logger.info(
                 "Waiting for Receiver to start running. Currently in state: "
                 f"{curr_state}."
             )
@@ -84,7 +88,7 @@ def wait_for_service_in_state(
             f"Service did not enter {expected_state} after {timeout_s} seconds."
         )
     
-    print(f"The Receiver service {service_id} has started running.")
+    logger.info(f"The Receiver service {service_id} has started running.")
 
 
 def ensure_receiver_started(
@@ -121,11 +125,11 @@ def ensure_receiver_started(
             "Expected only 0 or 1."
         )
     elif len(service_models) == 1:
-        print("Receiver service already exists.")
+        logger.info("Receiver service already exists.")
         receiver_service_model: ServiceModel = service_models[0]
         receiver_service_id = receiver_service_model.id
     else:
-        print("Receiver service doesn't yet exist. Starting one.")
+        logger.info("Receiver service doesn't yet exist. Starting one.")
         service_config = ApplyServiceModel(
             name=receiver_service_name,
             project_id=project_id,

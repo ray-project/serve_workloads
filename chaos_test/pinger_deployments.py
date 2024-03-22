@@ -1,6 +1,7 @@
 import sys
 import time
 import asyncio
+import logging
 import requests
 import itertools
 import traceback
@@ -31,6 +32,9 @@ from anyscale.sdk.anyscale_client.models import (
     ApplyServiceModel,
     ServiceModel,
 )
+
+
+logger = logging.getLogger("ray.serve")
 
 
 app = FastAPI()
@@ -169,7 +173,7 @@ class Pinger(BaseReconfigurableDeployment):
                         )
                     )
                 else:
-                    print(
+                    logger.info(
                         f"Already have {self.num_pending_requests} pendings "
                         "requests. No more will be sent until some of these "
                         "finish."
@@ -191,8 +195,7 @@ class Pinger(BaseReconfigurableDeployment):
                             num_successful_requests += 1
                         else:
                             response_text = await response.text()
-                            print(
-                                f"{time.strftime('%b %d -- %l:%M%p: ')}"
+                            logger.info(
                                 f"Got failed request: \n{response_text}"
                             )
                             self._count_failed_request(
@@ -204,22 +207,15 @@ class Pinger(BaseReconfigurableDeployment):
                         self.request_timeout_error_counter.inc(tags=metric_tags)
                         self._count_failed_request(-2, reason="TimeoutError")
                         self.fail_counter.inc(tags=metric_tags)
-                        print(
-                            f"{time.strftime('%b %d -- %l:%M%p: ')}"
-                            f"Got exception from request: \n{repr(e)}"
-                        )
+                        logger.exception(f"Got exception from request.")
                     except Exception as e:
                         self._count_failed_request(-1, reason=repr(e))
                         self._increment_error_counter(-1, tags=metric_tags)
                         self.fail_counter.inc(tags=metric_tags)
-                        print(
-                            f"{time.strftime('%b %d -- %l:%M%p: ')}"
-                            f"Got exception from request: \n{repr(e)}"
-                        )
+                        logger.exception(f"Got exception from request.")
 
                     if self.current_num_requests % (self.max_qps * 10) == 0:
-                        print(
-                            f"{time.strftime('%b %d -- %l:%M%p: ')}"
+                        logger.info(
                             f"Sent {self.current_num_requests} "
                             f'requests to "{self.url}".'
                         )
@@ -239,22 +235,23 @@ class Pinger(BaseReconfigurableDeployment):
                 else:
                     qps_warning_grace_number -= 1
                     if qps_warning_grace_number == 0:
-                        print(
+                        logger.info(
                             "Warning: max_qps is too high. Request processing "
                             "time exceeded send interval by "
                             f"{send_interval_remaining_s} seconds."
                         )
                         qps_warning_grace_number = 10
-        except Exception as e:
-            print(
-                f"{time.strftime('%b %d -- %l:%M%p: ')}"
+        except Exception:
+            logger.exception(
                 f"run_request_loop for target_url {self.url} crashed."
             )
-            traceback.print_exc(file=sys.stdout)
 
     def start(self):
         if self.run_request_loop_task is not None:
-            print("Called start() while Pinger is already running. Nothing changed.")
+            logger.info(
+                "Called start() while Pinger is already running. "
+                "Nothing changed."
+            )
         else:
             self.run_request_loop_task = run_background_task(
                 self.run_request_loop(
@@ -262,15 +259,18 @@ class Pinger(BaseReconfigurableDeployment):
                     payload=self.payload,
                 )
             )
-            print("Started Pinger. Call stop() to stop.")
+            logger.info("Started Pinger. Call stop() to stop.")
 
     async def stop(self):
         if self.run_request_loop_task is None:
-            print("Called stop() while Pinger was already stopped. Nothing changed.")
+            logger.info(
+                "Called stop() while Pinger was already stopped. "
+                "Nothing changed."
+            )
         else:
             self.run_request_loop_task.cancel()
             await self._drain_requests()
-            print("Stopped Pinger. Call start() to start.")
+            logger.info("Stopped Pinger. Call start() to start.")
         self._reset_current_counters()
 
     def get_info(self):
@@ -511,14 +511,14 @@ class Reaper(BaseReconfigurableDeployment):
 
     async def kill_loop(self):
         while True:
-            print(
+            logger.info(
                 f"Sleeping for {self.kill_interval_s} seconds before sending "
                 "next kill request."
             )
             await asyncio.sleep(self.kill_interval_s)
             json_payload = {NODE_KILLER_KEY: self.next_kill_option}
             try:
-                print(
+                logger.info(
                     f'Sending kill request with method "{self.next_kill_option.value}".'
                 )
                 requests.post(
@@ -527,8 +527,8 @@ class Reaper(BaseReconfigurableDeployment):
                     json=json_payload,
                     timeout=3,
                 )
-            except Exception as e:
-                print(f"Got following exception when sending kill request: {repr(e)}")
+            except Exception:
+                logger.exception("Got exception when sending kill request.")
             self.kill_counter.inc()
             self.latest_kill_method.set(
                 tags={"class": "Reaper", "method": self.next_kill_option.value}
@@ -539,18 +539,24 @@ class Reaper(BaseReconfigurableDeployment):
 
     def start(self):
         if self.kill_loop_task is not None:
-            print("Called start() while Reaper is already running. Nothing changed.")
+            logger.info(
+                "Called start() while Reaper is already running. "
+                "Nothing changed."
+            )
         else:
             self.kill_loop_task = run_background_task(self.kill_loop())
-            print("Started Reaper. Call stop() to stop.")
+            logger.info("Started Reaper. Call stop() to stop.")
 
     def stop(self):
         if self.kill_loop_task is not None:
             self.kill_loop_task.cancel()
             self.kill_loop_task = None
-            print("Stopped Reaper. Call start() to start.")
+            logger.info("Stopped Reaper. Call start() to start.")
         else:
-            print("Called stop() while Reaper was already stopped. Nothing changed.")
+            logger.info(
+                "Called stop() while Reaper was already stopped. "
+                "Nothing changed."
+            )
         self.current_kill_requests = 0
 
     def get_info(self) -> Dict[str, int]:
@@ -634,18 +640,16 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
         while True:
             try:
                 next_upgrade_type = next(self.upgrade_type_iter)
-                print(
-                    f"{time.strftime('%b %d -- %l:%M%p: ')}Waiting "
-                    f"{self.upgrade_interval_s} seconds before "
+                logger.info(
+                    f"Waiting {self.upgrade_interval_s} seconds before "
                     f"{next_upgrade_type} upgrading the Receiver."
                 )
                 await asyncio.sleep(self.upgrade_interval_s)
                 self._upgrade_receiver(next_upgrade_type)
             except StopIteration:
-                print(
-                    f"{time.strftime('%b %d -- %l:%M%p: ')}No upgrade type "
-                    f"was specified. Waiting {self.upgrade_interval_s} "
-                    "before upgrading the Receiver."
+                logger.exception(
+                    "No upgrade type was specified. Waiting "
+                    f"{self.upgrade_interval_s} before upgrading the Receiver."
                 )
                 await asyncio.sleep(self.upgrade_interval_s)
 
@@ -661,8 +665,8 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
                 )
                 self.num_writes_to_disk = int(response.text)
                 self.num_writes_to_disk_gauge.set(self.num_writes_to_disk)
-            except Exception as e:
-                print(f"Got exception when checking disk writes: {repr(e)}")
+            except Exception:
+                logger.exception(f"Got exception when checking disk writes.")
             await asyncio.sleep(5 * 60)
 
     def start(self):
@@ -672,17 +676,17 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
             self.run_disk_leaker_monitoring,
         ]
         if len(self.tasks) > 0:
-            print(
+            logger.info(
                 "Called start() while ReceiverHelmsman is already running. Nothing changed."
             )
         else:
             for method in task_methods:
                 self.tasks.append(run_background_task(method()))
-            print("Started ReceiverHelmsman. Call stop() to stop.")
+            logger.info("Started ReceiverHelmsman. Call stop() to stop.")
 
     def stop(self):
         if len(self.tasks) == 0:
-            print(
+            logger.info(
                 "Called stop() while ReceiverHelmsman was already stopped. Nothing changed."
             )
         else:
@@ -690,7 +694,7 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
                 task.cancel()
 
             self.tasks.clear()
-            print("Stopped ReceiverHelmsman. Call start() to start.")
+            logger.info("Stopped ReceiverHelmsman. Call start() to start.")
 
     def get_info(self):
         return {
@@ -765,8 +769,10 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
                 tags={"class": "ReceiverHelmsman", "status": receiver_status}
             )
             self.latest_receiver_status = receiver_status
-        except Exception as e:
-            print(f"Got exception when getting Receiver service's status: {repr(e)}")
+        except Exception:
+            logger.exception(
+                "Got exception when getting Receiver service's status."
+            )
 
     def _upgrade_receiver(self, upgrade_type: str):
         try:
@@ -787,7 +793,7 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
                 rollout_strategy=upgrade_type,
             )
 
-            print(
+            logger.info(
                 f"{upgrade_type} upgrading Receiver using {service_config} \n"
             )
             self.total_upgrade_requests += 1
@@ -796,7 +802,7 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
 
             try:
                 self.sdk.rollout_service(service_config)
-                print(
+                logger.info(
                     f"{upgrade_type} upgrade request succeeded. New import "
                     f'path: "{self.next_receiver_import_path}".'
                 )
@@ -818,14 +824,10 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
                 )
                 self.next_receiver_import_path = next(self.receiver_import_paths)
                 self.next_singleton_resource = next(self.receiver_singleton_resource)
-            except Exception as e:
-                self.upgrade_failure_counter.inc()
-                error_message = (
-                    f"Upgrade request failed with exception {e}\n"
-                )
-                print(error_message)
+            except Exception:
+                logger.exception(f"{upgrade_type} upgrade request failed.")
                 
-        except Exception as e:
-            print(
-                f"Got exception when {upgrade_type} upgrading Receiver: " f"{repr(e)}"
+        except Exception:
+            logger.exception(
+                f"Got exception when {upgrade_type} upgrading Receiver."
             )
