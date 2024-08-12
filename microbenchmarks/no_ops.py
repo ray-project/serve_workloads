@@ -3,22 +3,22 @@ from typing import Dict
 
 from ray import serve
 from ray.serve import Application
-from ray.serve.handle import RayServeHandle
+from ray.serve.handle import DeploymentHandle
 
 
 logger = logging.getLogger("ray.serve")
 
 
-@serve.deployment(max_concurrent_queries=10**9)
+@serve.deployment(max_ongoing_requests=10**9)
 class Forward:
-    def __init__(self, handle: RayServeHandle):
+    def __init__(self, handle: DeploymentHandle):
         self.handle = handle
 
     async def __call__(self, *args, **kwargs):
         return await (await self.handle.remote())
 
 
-@serve.deployment(max_concurrent_queries=10**9)
+@serve.deployment(max_ongoing_requests=10**9)
 class NoOp:
     def __call__(self, *args):
         return "No-op"
