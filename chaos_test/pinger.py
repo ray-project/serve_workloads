@@ -59,7 +59,7 @@ class PingerArgs(BaseModel):
     pinger_qps: int
     kill_interval_s: int
     upgrade_interval_s: int
-    upgrade_types: List[str] = ["IN_PLACE", "ROLLOUT"]
+    upgrade_types: List[str] = ["IN_PLACE", "ROLLOUT", "MAX_SURGE"]
 
 
 def wait_for_service_in_state(

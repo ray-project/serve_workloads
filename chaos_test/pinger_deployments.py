@@ -4,6 +4,7 @@ import asyncio
 import logging
 import requests
 import itertools
+import random
 import traceback
 from pathlib import Path
 from fastapi import FastAPI
@@ -783,6 +784,11 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
                 "ray_actor_options"
             ]["resources"] = {self.next_singleton_resource: 1}
 
+            max_surge_percent = None
+            if upgrade_type == "MAX_SURGE":
+                max_surge_percent = random.choice([20, 50, 75])
+                upgrade_type = "ROLLOUT"
+
             service_config = ApplyServiceModel(
                 name=self.receiver_service_name,
                 project_id=self.project_id,
@@ -791,6 +797,7 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
                 ray_serve_config=self.receiver_config_template,
                 ray_gcs_external_storage_config=self.receiver_gcs_external_storage_config,
                 rollout_strategy=upgrade_type,
+                max_surge_percent=max_surge_percent,
             )
 
             logger.info(
@@ -826,7 +833,7 @@ class ReceiverHelmsman(BaseReconfigurableDeployment):
                 self.next_singleton_resource = next(self.receiver_singleton_resource)
             except Exception:
                 logger.exception(f"{upgrade_type} upgrade request failed.")
-                
+
         except Exception:
             logger.exception(
                 f"Got exception when {upgrade_type} upgrading Receiver."
