@@ -11,7 +11,7 @@ from chaos_test.constants import NODE_KILLER_KEY, DISK_LEAKER_KEY, KillOptions
 
 import ray
 from ray import serve
-from ray._private.utils import run_background_task
+from ray._common.utils import run_background_task
 from ray.experimental.state.api import list_actors
 
 

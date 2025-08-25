@@ -26,7 +26,7 @@ from utilities.deployment_utils import BaseReconfigurableDeployment, get_receive
 
 from ray import serve
 from ray.util.metrics import Counter, Gauge
-from ray._private.utils import run_background_task
+from ray._common.utils import run_background_task
 
 from anyscale.sdk.anyscale_client.sdk import AnyscaleSDK
 from anyscale.sdk.anyscale_client.models import (

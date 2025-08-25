@@ -9,7 +9,7 @@ from aiohttp_retry import RetryClient, ExponentialRetry
 
 from ray import serve
 from ray.util.metrics import Counter, Gauge
-from ray._private.utils import run_background_task
+from ray._common.utils import run_background_task
 
 from utilities.deployment_utils import BaseReconfigurableDeployment
 from single_node_test.constants import ARTICLE_TEXT_KEY

@@ -9,7 +9,7 @@ from starlette.requests import Request
 
 import ray
 from ray import serve
-from ray._private.utils import run_background_task
+from ray._common.utils import run_background_task
 from ray.experimental.state.api import list_actors
 
 logger = logging.getLogger("ray.serve")
