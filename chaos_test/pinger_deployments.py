@@ -64,17 +64,17 @@ class Router:
     @app.get("/start-pingers")
     async def start_pingers(self) -> str:
         for pinger_handle in self.pinger_handles:
-            await (await pinger_handle.start.remote())
+            await pinger_handle.start.remote()
         return "Started Pingers!"
 
     @app.get("/start-reaper")
     async def start_reaper(self) -> str:
-        await (await self.reaper.start.remote())
+        await self.reaper.start.remote()
         return "Started Reaper!"
 
     @app.get("/start-helmsman")
     async def start_helmsman(self) -> str:
-        await (await self.helmsman.start.remote())
+        await self.helmsman.start.remote()
         return "Started Helmsman!"
 
     @app.get("/stop")
@@ -87,17 +87,17 @@ class Router:
     @app.get("/stop-pingers")
     async def stop_pingers(self) -> str:
         for pinger_handle in self.pinger_handles:
-            await (await pinger_handle.stop.remote())
+            await pinger_handle.stop.remote()
         return "Stopped Pingers!"
 
     @app.get("/stop-reaper")
     async def stop_reaper(self) -> str:
-        await (await self.reaper.stop.remote())
+        await self.reaper.stop.remote()
         return "Stopped Reaper!"
 
     @app.get("/stop-helmsman")
     async def stop_helmsman(self) -> str:
-        await (await self.helmsman.stop.remote())
+        await self.helmsman.stop.remote()
         return "Stopped Helmsman!"
 
     @app.get("/info")
@@ -105,10 +105,10 @@ class Router:
         info = {}
         for i in range(len(self.pinger_handles)):
             info[f"pinger_{i}"] = (
-                await (await self.pinger_handles[i].get_info.remote())
+                await self.pinger_handles[i].get_info.remote()
             ).copy()
-        reaper_info = (await (await self.reaper.get_info.remote())).copy()
-        helmsman_info = (await (await self.helmsman.get_info.remote())).copy()
+        reaper_info = (await self.reaper.get_info.remote()).copy()
+        helmsman_info = (await self.helmsman.get_info.remote()).copy()
         info.update(reaper_info)
         info.update(helmsman_info)
         return info
