@@ -74,9 +74,11 @@ class NodeKiller:
     def ray_stop_node(self):
         try:
             actors = list_actors(filters=[("state", "=", "ALIVE")], timeout=3)
-            logger.info(f"Actor summary:\n{json.dumps(actors, indent=4)}")
-        except Exception:
-            logger.exception(f"Failed to get actor info.")
+            # Convert ActorState objects to dictionaries for JSON serialization
+            actors_dict = [vars(actor) for actor in actors]
+            logger.info(f"Actor summary:\n{json.dumps(actors_dict, indent=4, default=str)}")
+        except Exception as e:
+            logger.error(f"Failed to get actor info: {e}")
         logger.info(f"Killing node {ray.get_runtime_context().get_node_id()}")
         subprocess.call(["ray", "stop", "-f"])
         return ""
@@ -84,9 +86,11 @@ class NodeKiller:
     def halt_node(self):
         try:
             actors = list_actors(filters=[("state", "=", "ALIVE")], timeout=3)
-            logger.info(f"Actor summary:\n{json.dumps(actors, indent=4)}")
-        except Exception:
-            logger.exception(f"Failed to get actor info.")
+            # Convert ActorState objects to dictionaries for JSON serialization
+            actors_dict = [vars(actor) for actor in actors]
+            logger.info(f"Actor summary:\n{json.dumps(actors_dict, indent=4, default=str)}")
+        except Exception as e:
+            logger.error(f"Failed to get actor info: {e}")
         logger.info(f"Killing node {ray.get_runtime_context().get_node_id()}")
         subprocess.call(["sudo", "halt", "--force"])
         return ""
