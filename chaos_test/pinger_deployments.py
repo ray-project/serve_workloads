@@ -272,6 +272,7 @@ class Pinger(BaseReconfigurableDeployment):
             )
         else:
             self.run_request_loop_task.cancel()
+            self.run_request_loop_task = None
             await self._drain_requests()
             logger.info("Stopped Pinger. Call start() to start.")
         self._reset_current_counters()
