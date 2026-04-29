@@ -142,9 +142,9 @@ class Pinger(BaseReconfigurableDeployment):
         self.pending_request_metadata = dict()
         self.pending_requests = set()
 
-    def reconfigure(self, config: Dict):
+    async def reconfigure(self, config: Dict):
         super().reconfigure(config)
-        self.stop()
+        await self.stop()
         self.start()
 
     async def run_request_loop(
