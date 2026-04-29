@@ -165,12 +165,14 @@ class Pinger(BaseReconfigurableDeployment):
 
                 if self.num_pending_requests < 2.5 * self.max_qps:
                     self.pending_requests.add(
-                        self._make_request(
-                            client=client,
-                            target_url=self.url,
-                            target_bearer_token=self.bearer_token,
-                            payload=payload,
-                            tags=metric_tags,
+                        asyncio.ensure_future(
+                            self._make_request(
+                                client=client,
+                                target_url=self.url,
+                                target_bearer_token=self.bearer_token,
+                                payload=payload,
+                                tags=metric_tags,
+                            )
                         )
                     )
                 else:
