@@ -1,0 +1,16 @@
+# design.md §7.2 — apply with: anyscale schedule apply -f schedules/version_upgrade.yaml
+timezone: America/Los_Angeles
+cron_expression: "0 10 * * 1"
+job_config:
+  name: serve-validation-version-upgrade
+  entrypoint: python upgrade_service.py --config-file anyscale_service.yaml --name serve-validation
+  image_uri: anyscale/ray:nightly-py310
+  env_vars:
+    SLACK_WEBHOOK_URL: "${SLACK_WEBHOOK_URL}"
+  working_dir: .
+  requirements: requirements.txt
+  max_retries: 1
+  compute_config:
+    cloud: anyscale_v2_default_cloud
+    head_node:
+      instance_type: m7i.2xlarge

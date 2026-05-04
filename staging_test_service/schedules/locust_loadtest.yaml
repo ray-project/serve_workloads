@@ -1,0 +1,19 @@
+# design.md §7.3 — Locust drives traffic from a separate Job cluster.
+# Apply: anyscale schedule apply -f schedules/locust_loadtest.yaml
+timezone: America/Los_Angeles
+cron_expression: "0 10 * * 2,4"
+job_config:
+  name: serve-validation-locust
+  entrypoint: >-
+    locust -f locustfile.py --headless --host https://serve-validation-pyz23.cld-kvedzwag2qa8i5bj.s.anyscaleuserdata-staging.com --processes 16 --exit-code-on-error 0
+  image_uri: anyscale/ray:nightly-py310
+  env_vars:
+    ANYSCALE_SERVICE_TOKEN: "Ninb6lhVXBodhHL_2STx1kLqOMIPag8VraCBAQQai78"
+    LOCUST_RUN_MINUTES: "60"
+  working_dir: .
+  requirements: requirements.txt
+  compute_config:
+    cloud: anyscale_v2_default_cloud
+    head_node:
+      instance_type: m7i.8xlarge
+  max_retries: 0

@@ -1,0 +1,109 @@
+# Anyscale Service — deploy with:
+#   anyscale service deploy -f anyscale_service.yaml -w .
+# Override image: anyscale service deploy -f anyscale_service.yaml --image-uri other/image:tag -w .
+# The image must resolve to a Cluster Environment build in your org (see console or `anyscale cluster-env list`).
+# upgrade_service.py defaults --working-dir to the current directory.
+#
+# Schema: anyscale.service.models.ServiceConfig (CLI 0.26.x). Ray Serve options that
+# conflict with Anyscale-managed networking are omitted (host/port/proxy_location).
+
+name: serve-validation
+
+image_uri: anyscale/ray:nightly-py310-cu128
+
+working_dir: .
+
+requirements: requirements.txt
+
+compute_config:
+  cloud: anyscale_v2_default_cloud
+  head_node:
+    instance_type: m7i.2xlarge
+    # No schedulable CPU on head — Serve replicas and tasks go to workers only (design.md §3.1).
+    resources:
+      CPU: 0
+  worker_nodes:
+    - name: cpu-general
+      instance_type: m5.4xlarge
+      min_nodes: 0
+      max_nodes: 150
+      market_type: ON_DEMAND
+    - name: cpu-gpu-sim
+      instance_type: m5.4xlarge
+      min_nodes: 0
+      max_nodes: 49
+      market_type: ON_DEMAND
+      # Expose simulated_gpu on this group (logical resources on the node).
+      resources:
+        simulated_gpu: 8
+
+# Omit http_options.host/port and grpc_options.port — set by Anyscale.
+grpc_options:
+  grpc_servicer_functions:
+    - ray.serve.generated.serve_pb2_grpc.add_UserDefinedServiceServicer_to_server
+
+# Optional: enable actor_options(... simulated_gpu=True) in code when this group is used.
+# Default in common.py is off so CPU-only clusters still schedule.
+env_vars:
+  RAY_SERVE_SIMULATED_GPU: "1"
+
+  # ray serve forward looking features flags
+  # we should marinate these here before recommending them to customers
+  # RAY_SERVE_RUN_USER_CODE_IN_SEPARATE_THREAD: "0"
+  # RAY_SERVE_RUN_ROUTER_IN_SEPARATE_LOOP: "0"
+  RAY_SERVE_USE_GRPC_BY_DEFAULT: "1"
+  RAY_SERVE_ENABLE_HA_PROXY: "1"
+  RAY_SERVE_HAPROXY_BALANCE_ALGORITHM: "random(2)"
+  RAY_SERVE_AGGREGATE_METRICS_AT_CONTROLLER: "1"
+  RAY_SERVE_FAIL_ON_RANK_ERROR: "1"
+  RAY_SERVE_LOG_CLIENT_ADDRESS: "1"
+  RAY_SERVE_RUN_SYNC_IN_THREADPOOL: "1"
+
+applications:
+  - name: echo-baseline
+    route_prefix: /echo
+    import_path: serve_validation.apps.echo_baseline:app
+
+  - name: nlp-chain
+    route_prefix: /nlp-chain
+    import_path: serve_validation.apps.nlp_chain:app
+
+  - name: batch-infer
+    route_prefix: /batch-infer
+    import_path: serve_validation.apps.batch_infer:app
+
+  - name: stream-chat
+    route_prefix: /stream-chat
+    import_path: serve_validation.apps.stream_chat:app
+
+  - name: mux-model-router
+    route_prefix: /mux
+    import_path: serve_validation.apps.mux_model_router:app
+
+  - name: image-dag
+    route_prefix: /image-dag
+    import_path: serve_validation.apps.image_dag:app
+
+  - name: cpu-fanout
+    route_prefix: /cpu-fanout
+    import_path: serve_validation.apps.cpu_fanout:app
+
+  - name: mixed-preprocess
+    route_prefix: /mixed-preprocess
+    import_path: serve_validation.apps.mixed_preprocess:app
+
+  - name: heavy-payload
+    route_prefix: /heavy-payload
+    import_path: serve_validation.apps.heavy_payload:app
+
+  - name: long-runner
+    route_prefix: /long-runner
+    import_path: serve_validation.apps.long_runner:app
+
+  - name: highscale-stress
+    route_prefix: /highscale
+    import_path: serve_validation.apps.highscale_stress:app
+
+  - name: grpc-canary
+    route_prefix: /grpc-canary
+    import_path: serve_validation.apps.grpc_canary:app
