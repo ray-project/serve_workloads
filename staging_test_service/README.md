@@ -70,7 +70,8 @@ python upgrade_service.py --config-file anyscale_service.yaml --name serve-valid
 Run the full diurnal load test against the live service (150 min, compressed 24-hour cycle):
 
 ```bash
-ANYSCALE_SERVICE_TOKEN="Ninb6lhVXBodhHL_2STx1kLqOMIPag8VraCBAQQai78" locust -f locustfile.py --run-time 150m \
+export ANYSCALE_SERVICE_TOKEN=...   # service bearer token; do not paste literal tokens into source files
+locust -f locustfile.py --run-time 150m \
     --host https://serve-validation-pyz23.cld-kvedzwag2qa8i5bj.s.anyscaleuserdata-staging.com --processes 16
 ```
 

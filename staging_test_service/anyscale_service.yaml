@@ -52,6 +52,10 @@ env_vars:
   # RAY_SERVE_RUN_USER_CODE_IN_SEPARATE_THREAD: "0"
   # RAY_SERVE_RUN_ROUTER_IN_SEPARATE_LOOP: "0"
   RAY_SERVE_USE_GRPC_BY_DEFAULT: "1"
+  # heavy-payload returns up to 50 MB; the proxy↔replica gRPC channel uses
+  # this limit (default 4 MiB) and was rejecting responses with
+  # StatusCode.RESOURCE_EXHAUSTED. 64 MiB covers the 50 MB worst case with margin.
+  RAY_SERVE_REPLICA_GRPC_MAX_MESSAGE_LENGTH: "67108864"
   RAY_SERVE_ENABLE_HA_PROXY: "1"
   RAY_SERVE_HAPROXY_BALANCE_ALGORITHM: "random(2)"
   RAY_SERVE_AGGREGATE_METRICS_AT_CONTROLLER: "1"
