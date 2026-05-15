@@ -17,7 +17,8 @@ run_locust_test.py         # Locust Scheduled Job wrapper — posts final result
 upgrade_service.py         # Weekly version-upgrade script
 schedules/
   version_upgrade.yaml     # Anyscale Scheduled Job — weekly redeploy
-  locust_loadtest.yaml     # Anyscale Scheduled Job — weekly load test
+  locust_loadtest.yaml       # Anyscale Scheduled Job — Tue/Thu 60-minute load test
+  locust_loadtest_daily.yaml # Anyscale Scheduled Job — daily 15-minute load test
 ```
 
 ## Prerequisites
@@ -96,18 +97,28 @@ Tune scale via environment variables:
 
 ## Scheduled jobs
 
-Register the weekly version upgrade (Mondays 02:00 UTC) and load test (Mondays 06:00 UTC):
+Register the scheduled jobs:
 
 ```bash
 anyscale schedule apply -f schedules/version_upgrade.yaml
 anyscale schedule apply -f schedules/locust_loadtest.yaml
+anyscale schedule apply -f schedules/locust_loadtest_daily.yaml
 ```
 
-Trigger either job manually:
+Schedule cadence:
+
+| Schedule | Job name | Cadence | Duration |
+|---|---|---|---|
+| `schedules/version_upgrade.yaml` | `serve-validation-version-upgrade` | Mondays at 10:00 America/Los_Angeles | N/A |
+| `schedules/locust_loadtest.yaml` | `serve-validation-locust` | Tuesdays and Thursdays at 10:00 America/Los_Angeles | 60 min |
+| `schedules/locust_loadtest_daily.yaml` | `serve-validation-locust-daily` | Daily at 10:00 America/Los_Angeles | 15 min |
+
+Trigger any job manually:
 
 ```bash
 anyscale schedule run --name serve-validation-version-upgrade
 anyscale schedule run --name serve-validation-locust
+anyscale schedule run --name serve-validation-locust-daily
 ```
 
 ## Key environment variables
