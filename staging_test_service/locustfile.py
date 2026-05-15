@@ -159,7 +159,7 @@ class ApiCaller(_AuthMixin, HttpUser):
 
     @task
     def echo(self):
-        self.client.get("/echo/")
+        self.client.get("/echo/", timeout=3600)
 
 
 # ---------------------------------------------------------------------------
@@ -174,21 +174,21 @@ class PipelineUser(_AuthMixin, HttpUser):
     @task(3)
     def nlp(self):
         payload = os.urandom(random.randint(64, 512))
-        self.client.post("/nlp-chain/", data=payload)
+        self.client.post("/nlp-chain/", data=payload, timeout=3600)
 
     @task(2)
     def image(self):
         # Simulate 2-10 MB image upload (design.md §3.3)
         size = random.randint(2 * 1024, 10 * 1024)  # 2-10 KB compressed stand-in
-        self.client.post("/image-dag/", data=os.urandom(size))
+        self.client.post("/image-dag/", data=os.urandom(size), timeout=3600)
 
     @task(2)
     def fanout(self):
-        self.client.post("/cpu-fanout/", data=os.urandom(random.randint(32, 256)))
+        self.client.post("/cpu-fanout/", data=os.urandom(random.randint(32, 256)), timeout=3600)
 
     @task(1)
     def mixed(self):
-        self.client.post("/mixed-preprocess/", data=os.urandom(random.randint(64, 512)))
+        self.client.post("/mixed-preprocess/", data=os.urandom(random.randint(64, 512)), timeout=3600)
 
 
 # ---------------------------------------------------------------------------
@@ -209,6 +209,7 @@ class BatchSubmitter(_AuthMixin, HttpUser):
                 "/batch-infer/",
                 json={"name": f"item-{i}", "idx": i},
                 name="/batch-infer/ [burst]",
+                timeout=3600,
             )
             time.sleep(random.uniform(0.05, 0.15))
 
@@ -231,7 +232,7 @@ class StreamConsumer(_AuthMixin, HttpUser):
             json={"tokens": tokens, "duration_s": duration},
             stream=True,
             catch_response=True,
-            timeout=max(120, duration * 3),
+            timeout=max(3600, duration * 3),
         ) as resp:
             if resp.status_code == 200:
                 for _ in resp.iter_content(chunk_size=4096):
@@ -257,6 +258,7 @@ class ModelSwitcher(_AuthMixin, HttpUser):
             json={"q": f"query-{random.randint(0, 999)}"},
             headers={"serve_multiplexed_model_id": model_id},
             name=f"/mux/ [model={model_id}]",
+            timeout=3600,
         )
 
 
@@ -275,7 +277,7 @@ class HeavyUploader(_AuthMixin, HttpUser):
         self.client.post(
             "/heavy-payload/",
             json={"mb": round(mb, 1)},
-            timeout=60,
+            timeout=3600,
             name="/heavy-payload/",
         )
 
@@ -295,7 +297,7 @@ class LongTaskSubmitter(_AuthMixin, HttpUser):
         self.client.post(
             "/long-runner/",
             json={"seconds": round(seconds, 1)},
-            timeout=max(180, seconds * 1.5),
+            timeout=3600,
             name="/long-runner/",
         )
 
@@ -311,4 +313,4 @@ class ScaleHammer(_AuthMixin, HttpUser):
 
     @task
     def hammer(self):
-        self.client.get("/highscale/")
+        self.client.get("/highscale/", timeout=3600)

@@ -1,17 +1,19 @@
 # design.md §7.3 — Locust drives traffic from a separate Job cluster.
-# Apply (the schedule YAML uses an env-var placeholder for the auth token, so
+# Apply (the schedule YAML uses env-var placeholders for secrets, so
 # expand it through envsubst before piping to anyscale):
 #   export ANYSCALE_SERVICE_TOKEN=...   # service bearer token
+#   export SLACK_WEBHOOK_URL=...        # optional Slack notification webhook
 #   envsubst < schedules/locust_loadtest.yaml | anyscale schedule apply -f -
 timezone: America/Los_Angeles
 cron_expression: "0 10 * * 2,4"
 job_config:
   name: serve-validation-locust
   entrypoint: >-
-    locust -f locustfile.py --headless --host https://serve-validation-pyz23.cld-kvedzwag2qa8i5bj.s.anyscaleuserdata-staging.com --processes 16 --exit-code-on-error 0
+    python run_locust_test.py --host https://serve-validation-pyz23.cld-kvedzwag2qa8i5bj.s.anyscaleuserdata-staging.com --processes 16 --exit-code-on-error 0
   image_uri: anyscale/ray:nightly-py310
   env_vars:
     ANYSCALE_SERVICE_TOKEN: "${ANYSCALE_SERVICE_TOKEN}"
+    SLACK_WEBHOOK_URL: "${SLACK_WEBHOOK_URL}"
     LOCUST_RUN_MINUTES: "60"
   working_dir: .
   requirements: requirements.txt

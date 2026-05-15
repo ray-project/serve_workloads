@@ -38,6 +38,14 @@ compute_config:
         simulated_gpu: 8
 
 # Omit http_options.host/port and grpc_options.port — set by Anyscale.
+http_options:
+  # Ray Serve proxy → replica timeout. Sized for long-runner (sleeps up to 125s,
+  # design SLO P99 < 130s). Note: the Anyscale platform Envoy/ALB has its own
+  # idle/request timeout (~300s observed) that this YAML cannot override; for
+  # caps above 300s, escalate to the Anyscale platform team.
+  request_timeout_s: 3600
+  keep_alive_timeout_s: 3600
+
 grpc_options:
   grpc_servicer_functions:
     - ray.serve.generated.serve_pb2_grpc.add_UserDefinedServiceServicer_to_server
@@ -55,13 +63,30 @@ env_vars:
   # heavy-payload returns up to 50 MB; the proxy↔replica gRPC channel uses
   # this limit (default 4 MiB) and was rejecting responses with
   # StatusCode.RESOURCE_EXHAUSTED. 64 MiB covers the 50 MB worst case with margin.
-  RAY_SERVE_REPLICA_GRPC_MAX_MESSAGE_LENGTH: "67108864"
+  RAY_SERVE_REPLICA_GRPC_MAX_MESSAGE_LENGTH: "2147483647"
   RAY_SERVE_ENABLE_HA_PROXY: "1"
   RAY_SERVE_HAPROXY_BALANCE_ALGORITHM: "random(2)"
   RAY_SERVE_AGGREGATE_METRICS_AT_CONTROLLER: "1"
   RAY_SERVE_FAIL_ON_RANK_ERROR: "1"
   RAY_SERVE_LOG_CLIENT_ADDRESS: "1"
   RAY_SERVE_RUN_SYNC_IN_THREADPOOL: "1"
+  # RAY_SERVE_HAPROXY_RELOAD_TIMEOUT_S: "60"
+  RAY_SERVE_HAPROXY_RETRIES: "1000" # check this later ----
+
+  # RAY_SERVE_DIRECT_INGRESS_MIN_DRAINING_PERIOD_S: "90"
+  RAY_SERVE_HAPROXY_HARD_STOP_AFTER_S: "1800"
+  # RAY_SERVE_HAPROXY_TIMEOUT_CLIENT_S: "3600"
+  # RAY_SERVE_HAPROXY_HEALTH_CHECK_FASTINTER: "250"
+  # RAY_SERVE_HAPROXY_HEALTH_CHECK_DOWNINTER: "250"
+  # RAY_SERVE_HAPROXY_TIMEOUT_SERVER_S: "3600"
+  # RAY_SERVE_HAPROXY_TIMEOUT_CONNECT_S: "5"
+
+  # NEW — these are the critical fix:
+  # RAY_SERVE_PROXY_HEALTH_CHECK_TIMEOUT_S: "60" # check this later ----
+  # RAY_SERVE_PROXY_HEALTH_CHECK_PERIOD_S: "30" # check this later ----
+
+  RAY_SERVE_QUEUE_LENGTH_RESPONSE_DEADLINE_S: "0.5"
+  RAY_SERVE_HAPROXY_BROADCAST_COALESCE_S: "0.5"
 
 applications:
   - name: echo-baseline

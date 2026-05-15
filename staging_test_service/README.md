@@ -13,6 +13,7 @@ serve_validation/          # Application code (12 Serve apps + shared utilities)
 serve_config.yaml          # Local multi-app Serve config (serve run)
 anyscale_service.yaml      # Anyscale Service config (deploy)
 locustfile.py              # Locust load test — 8 personas, diurnal schedule
+run_locust_test.py         # Locust Scheduled Job wrapper — posts final results to Slack
 upgrade_service.py         # Weekly version-upgrade script
 schedules/
   version_upgrade.yaml     # Anyscale Scheduled Job — weekly redeploy
@@ -71,9 +72,16 @@ Run the full diurnal load test against the live service (150 min, compressed 24-
 
 ```bash
 export ANYSCALE_SERVICE_TOKEN=...   # service bearer token; do not paste literal tokens into source files
-locust -f locustfile.py --run-time 150m \
-    --host https://serve-validation-pyz23.cld-kvedzwag2qa8i5bj.s.anyscaleuserdata-staging.com --processes 16
+export SLACK_WEBHOOK_URL=...         # optional; posts final Locust summary to Slack
+python run_locust_test.py \
+    --host https://serve-validation-pyz23.cld-kvedzwag2qa8i5bj.s.anyscaleuserdata-staging.com \
+    --processes 16
 ```
+
+The wrapper runs Locust with CSV and HTML output enabled, then posts the aggregate
+`run_stats.csv` result to Slack. Artifacts are written under
+`/tmp/locust-results/<timestamp>/` by default, including `run_stats.csv`,
+`run_failures.csv`, and `report.html`.
 
 Tune scale via environment variables:
 
@@ -82,6 +90,9 @@ Tune scale via environment variables:
 | `LOCUST_RUN_MINUTES` | `150` | Total run duration (24-hour cycle compressed into this) |
 | `LOCUST_PEAK_USERS` | `2000` | Locust user count at 1.0x load multiplier |
 | `ANYSCALE_SERVICE_TOKEN` | — | Bearer token for Anyscale Service auth |
+| `SLACK_WEBHOOK_URL` | — | Optional Slack incoming webhook for final Locust result notification |
+| `LOCUST_RESULTS_ROOT` | `/tmp/locust-results` | Root directory for Locust CSV/HTML artifacts |
+| `LOCUST_PROCESSES` | `16` | Default process count used by `run_locust_test.py` |
 
 ## Scheduled jobs
 
@@ -105,7 +116,7 @@ anyscale schedule run --name serve-validation-locust
 |---|---|---|
 | `ANYSCALE_SERVICE_CONFIG` | `upgrade_service.py` | Path to service YAML (default: `anyscale_service.yaml`) |
 | `UPGRADE_WAIT_TIMEOUT_S` | `upgrade_service.py` | Timeout for `anyscale service wait` (default: `1200`) |
-| `SLACK_WEBHOOK_URL` | `upgrade_service.py` | Slack incoming webhook for deploy notifications |
+| `SLACK_WEBHOOK_URL` | `upgrade_service.py`, `run_locust_test.py` | Slack incoming webhook for deploy and Locust result notifications |
 | `ANYSCALE_SERVICE_TOKEN` | `locustfile.py` | Bearer token injected into all Locust requests |
 | `LOCUST_PEAK_USERS` | `locustfile.py` | User count at 1.0x load (default: `2000`) |
 | `LOCUST_RUN_MINUTES` | `locustfile.py` | Run duration in minutes (default: `150`) |

@@ -20,6 +20,8 @@ from serve_validation.config import _with_max, AUTOSCALE_DIURNAL
     ray_actor_options=actor_options(num_cpus=0.5, simulated_gpu=True),
     health_check_period_s=10,
     health_check_timeout_s=30,
+    max_ongoing_requests=10000,
+    graceful_shutdown_timeout_s=1200,
 )
 class StreamChat:
     async def __call__(self, request: Request):

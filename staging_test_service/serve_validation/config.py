@@ -9,8 +9,8 @@ AUTOSCALE_STABLE = AutoscalingConfig(
     min_replicas=1,
     max_replicas=1,  # overridden per deployment
     target_ongoing_requests=5,
-    upscale_delay_s=30,
-    downscale_delay_s=120,
+    upscale_delay_s=10,
+    downscale_delay_s=300,
     downscale_to_zero_delay_s=300,
 )
 
@@ -30,7 +30,7 @@ AUTOSCALE_DECLINE = AutoscalingConfig(
     max_replicas=1,
     target_ongoing_requests=3,
     upscale_delay_s=20,
-    downscale_delay_s=120,
+    downscale_delay_s=300,
     downscale_to_zero_delay_s=300,
 )
 
@@ -40,8 +40,8 @@ AUTOSCALE_SPIKY = AutoscalingConfig(
     max_replicas=1,
     target_ongoing_requests=1,
     upscale_delay_s=5,
-    downscale_delay_s=60,
-    downscale_to_zero_delay_s=180,
+    downscale_delay_s=300,
+    downscale_to_zero_delay_s=300,
 )
 
 # Diurnal (stream-chat, mixed-preprocess)
@@ -50,7 +50,7 @@ AUTOSCALE_DIURNAL = AutoscalingConfig(
     max_replicas=1,
     target_ongoing_requests=2,
     upscale_delay_s=10,
-    downscale_delay_s=180,
+    downscale_delay_s=300,
     downscale_to_zero_delay_s=300,
 )
 
@@ -60,7 +60,7 @@ AUTOSCALE_LONG_RUNNER = AutoscalingConfig(
     max_replicas=1,
     target_ongoing_requests=2,
     upscale_delay_s=20,
-    downscale_delay_s=120,
+    downscale_delay_s=300,
     downscale_to_zero_delay_s=600,
 )
 

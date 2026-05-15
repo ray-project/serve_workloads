@@ -14,6 +14,7 @@ tok_opts = dict(
     ray_actor_options=actor_options(num_cpus=0.5),
     health_check_period_s=10,
     health_check_timeout_s=30,
+    max_ongoing_requests=1000,
 )
 enc_opts = dict(
     name="nlp-encoder",
@@ -21,6 +22,7 @@ enc_opts = dict(
     ray_actor_options=actor_options(num_cpus=0.5, simulated_gpu=True),
     health_check_period_s=10,
     health_check_timeout_s=30,
+    max_ongoing_requests=1000,
 )
 post_opts = dict(
     name="nlp-postprocessor",
@@ -28,6 +30,7 @@ post_opts = dict(
     ray_actor_options=actor_options(num_cpus=0.5),
     health_check_period_s=10,
     health_check_timeout_s=30,
+    max_ongoing_requests=1000,
 )
 
 

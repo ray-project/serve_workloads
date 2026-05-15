@@ -18,6 +18,7 @@ def _opts(name: str, max_r: int, sim_gpu: bool):
         ray_actor_options=actor_options(num_cpus=0.5, simulated_gpu=sim_gpu),
         health_check_period_s=10,
         health_check_timeout_s=30,
+        max_ongoing_requests=1000,
     )
 
 

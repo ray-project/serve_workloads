@@ -14,17 +14,19 @@ router_opts = dict(
     name="cpu-fanout-router",
     autoscaling_config=_with_max(AUTOSCALE_SPIKY, 64),
     ray_actor_options=actor_options(num_cpus=0.5),
-    max_ongoing_requests=100,
     health_check_period_s=10,
-    health_check_timeout_s=30,
+    health_check_timeout_s=60,
+    max_ongoing_requests=200,
+    graceful_shutdown_timeout_s=1200,
 )
 
 worker_opts = dict(
     autoscaling_config=_with_max(AUTOSCALE_SPIKY, 64),
     ray_actor_options=actor_options(num_cpus=0.5),
-    max_ongoing_requests=50,
     health_check_period_s=10,
-    health_check_timeout_s=30,
+    health_check_timeout_s=60,
+    max_ongoing_requests=20,
+    graceful_shutdown_timeout_s=1200,
 )
 
 agg_opts = dict(
@@ -32,7 +34,9 @@ agg_opts = dict(
     autoscaling_config=_with_max(AUTOSCALE_SPIKY, 64),
     ray_actor_options=actor_options(num_cpus=0.5),
     health_check_period_s=10,
-    health_check_timeout_s=30,
+    health_check_timeout_s=60,
+    max_ongoing_requests=20,
+    graceful_shutdown_timeout_s=1200,
 )
 
 
@@ -83,13 +87,20 @@ class Router:
 
     async def __call__(self, request: Request):
         body = await request.body() or b"ping"
-        o0, o1, o2, o3 = await asyncio.gather(
+        results = await asyncio.gather(
             self.w0.remote(body),
             self.w1.remote(body),
             self.w2.remote(body),
             self.w3.remote(body),
+            return_exceptions=True,
         )
-        return await self.agg.remote([o0, o1, o2, o3])
+        # Filter out failed ones; pass surviving results to aggregator.
+        successful = [r for r in results if not isinstance(r, BaseException)]
+        if not successful:
+            # If everyone failed, surface a 503 instead of a vague 500
+            from fastapi import HTTPException
+            raise HTTPException(status_code=503, detail="all workers failed")
+        return await self.agg.remote(successful)
 
 
 app = Router.bind(
