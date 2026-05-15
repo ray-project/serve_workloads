@@ -1,0 +1,64 @@
+# Multi-application Ray Serve config (design.md Section 3, 7).
+# Run from repo root:  PYTHONPATH=. serve run serve_config.yaml
+# Local Ray with simulated_gpu:  RAY_SERVE_VALIDATION_DEV=1 ray start --head
+#    or:  ray start --head --resources='{"simulated_gpu": 1000}'
+
+proxy_location: EveryNode
+
+http_options:
+  host: 0.0.0.0
+  port: 8000
+
+grpc_options:
+  port: 9000
+  grpc_servicer_functions:
+    - ray.serve.generated.serve_pb2_grpc.add_UserDefinedServiceServicer_to_server
+
+applications:
+  - name: echo-baseline
+    route_prefix: /echo
+    import_path: serve_validation.apps.echo_baseline:app
+
+  - name: nlp-chain
+    route_prefix: /nlp-chain
+    import_path: serve_validation.apps.nlp_chain:app
+
+  - name: batch-infer
+    route_prefix: /batch-infer
+    import_path: serve_validation.apps.batch_infer:app
+
+  - name: stream-chat
+    route_prefix: /stream-chat
+    import_path: serve_validation.apps.stream_chat:app
+
+  - name: mux-model-router
+    route_prefix: /mux
+    import_path: serve_validation.apps.mux_model_router:app
+
+  - name: image-dag
+    route_prefix: /image-dag
+    import_path: serve_validation.apps.image_dag:app
+
+  - name: cpu-fanout
+    route_prefix: /cpu-fanout
+    import_path: serve_validation.apps.cpu_fanout:app
+
+  - name: mixed-preprocess
+    route_prefix: /mixed-preprocess
+    import_path: serve_validation.apps.mixed_preprocess:app
+
+  - name: heavy-payload
+    route_prefix: /heavy-payload
+    import_path: serve_validation.apps.heavy_payload:app
+
+  - name: long-runner
+    route_prefix: /long-runner
+    import_path: serve_validation.apps.long_runner:app
+
+  - name: highscale-stress
+    route_prefix: /highscale
+    import_path: serve_validation.apps.highscale_stress:app
+
+  - name: grpc-canary
+    route_prefix: /grpc-canary
+    import_path: serve_validation.apps.grpc_canary:app
