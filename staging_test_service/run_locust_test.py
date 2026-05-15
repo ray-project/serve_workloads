@@ -82,6 +82,10 @@ def _format_optional_rate(value: Optional[float]) -> str:
     return f"{value:.2f}"
 
 
+def _format_failure_rate(rate: float) -> str:
+    return f"{rate * 100:.4f}%"
+
+
 def _format_percentile_pair(p95_ms: Optional[float], p99_ms: Optional[float]) -> str:
     if p95_ms is None or p99_ms is None:
         return f"{_format_optional_ms(p95_ms)} / {_format_optional_ms(p99_ms)}"
@@ -100,28 +104,45 @@ def build_slack_message(
 ) -> str:
     status = "PASSED" if ok else "FAILED"
     lines = [
-        f"Locust load test {status}",
+        f"*Locust load test {status}*",
         f"Host: {host}",
-        f"Duration: {duration_s:.1f}s",
-        f"Exit code: {exit_code}",
-        f"Artifacts: {results_dir}",
+        "",
+        "*Run*",
+        f"- Duration: {duration_s:.1f}s",
+        f"- Exit code: {exit_code}",
+        f"- Artifacts: `{results_dir}`",
     ]
 
     if stats is None:
-        lines.append("No Locust stats CSV was produced.")
+        lines.extend(["", "*Results*", "- No Locust stats CSV was produced."])
     else:
         lines.extend(
             [
-                f"Requests: {stats.request_count}",
-                f"Failures: {stats.failure_count} ({stats.failure_rate:.2%})",
-                f"RPS: {_format_optional_rate(stats.requests_per_s)}",
-                f"Avg latency: {_format_optional_ms(stats.avg_response_ms)}",
-                f"P95/P99: {_format_percentile_pair(stats.p95_ms, stats.p99_ms)}",
+                "",
+                "*Results*",
+                f"- Requests: {stats.request_count:,}",
+                (
+                    f"- Failures: {stats.failure_count:,} "
+                    f"({_format_failure_rate(stats.failure_rate)})"
+                ),
+                f"- RPS: {_format_optional_rate(stats.requests_per_s)}",
+                f"- Avg latency: {_format_optional_ms(stats.avg_response_ms)}",
+                f"- P95/P99: {_format_percentile_pair(stats.p95_ms, stats.p99_ms)}",
             ]
         )
 
     if error:
-        lines.append(f"Error: {error}")
+        lines.extend(["", f"*Error:* {error}"])
+
+    lines.extend(
+        [
+            "",
+            (
+                "_Note: If the failure rate is >= 0.01%, this may signify "
+                "a regression and should be investigated._"
+            ),
+        ]
+    )
 
     return "\n".join(lines)
 
