@@ -27,7 +27,18 @@ import random
 import time
 from typing import List, Optional, Tuple
 
-from locust import HttpUser, LoadTestShape, between, task
+from locust import HttpUser, LoadTestShape, between, task, events
+from requests.exceptions import ConnectionError as ReqConnectionError
+
+import locust.stats
+
+# Print the periodic request-stats table every 5s instead of locust's 2s
+# default (less log spam over a 30-60 min run), and chart p50/p95/p99/p99.9
+# in the --html report's response-time graph (locust's default is only
+# p50/p95). p99.99/max are intentionally left off the rolling-window chart —
+# they're too sample-thin per window; read those from the final summary.
+locust.stats.CONSOLE_STATS_INTERVAL_SEC = 5
+locust.stats.PERCENTILES_TO_CHART = [0.5, 0.95, 0.99, 0.999]
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -36,6 +47,10 @@ from locust import HttpUser, LoadTestShape, between, task
 _AUTH_TOKEN = os.environ.get("ANYSCALE_SERVICE_TOKEN", "")
 _RUN_MINUTES = int(os.environ.get("LOCUST_RUN_MINUTES", "150"))
 _PEAK_USERS = int(os.environ.get("LOCUST_PEAK_USERS", "2000"))
+# Cap how fast users are added/removed (users/sec). Without this, a 5x spike
+# window latches a ramp of ~(gap/30) ≈ 285 users/s, slamming ~8.5k users in
+# over ~30s. Clamping to 50/s spreads that climb (and ramp-down) over ~3 min.
+_MAX_SPAWN_RATE = float(os.environ.get("LOCUST_MAX_SPAWN_RATE", "50"))
 
 # ---------------------------------------------------------------------------
 # Auth mixin
@@ -47,6 +62,20 @@ class _AuthMixin:
     def on_start(self):
         if _AUTH_TOKEN:
             self.client.headers.update({"Authorization": f"Bearer {_AUTH_TOKEN}"})
+
+        # Retry on DNS gaierror(-3) — upstream resolver rate-limits under sustained load.
+        original_request = self.client.request
+
+        def _retrying_request(method, url, **kwargs):
+            for attempt in range(3):
+                try:
+                    return original_request(method, url, **kwargs)
+                except ReqConnectionError as e:
+                    if attempt == 2 or "Temporary failure in name resolution" not in str(e):
+                        raise
+                    time.sleep(0.1 * (2 ** attempt))
+
+        self.client.request = _retrying_request
 
 
 # ---------------------------------------------------------------------------
@@ -112,10 +141,13 @@ def _load_multiplier(elapsed_s: float) -> float:
             mult = start_m + t * (end_m - start_m)
             break
 
-    # Scheduled spikes
+    # Scheduled spikes — ramp the boost up/down across the window (triangular:
+    # 1x at the edges, full boost at center) instead of a rectangular pulse, so
+    # the target rises and falls smoothly rather than stepping 5x instantly.
     for center_h, half_dur, boost in _SPIKE_WINDOWS:
-        if abs(sim_hour - center_h) <= half_dur:
-            mult *= boost
+        dist = abs(sim_hour - center_h)
+        if dist <= half_dur:
+            mult *= 1.0 + (boost - 1.0) * (1.0 - dist / half_dur)
 
     return mult
 
@@ -142,9 +174,14 @@ class DiurnalShape(LoadTestShape):
             mult *= 3.0  # 3x micro-spike
 
         target_users = max(1, int(_PEAK_USERS * mult))
-        # Spawn rate: reach target within ~30 seconds
+        # Ramp toward target at gap/30 (a 30s time-constant, not a deadline),
+        # but never faster than _MAX_SPAWN_RATE users/sec. locust latches a ramp
+        # and runs it to completion before re-polling tick(), so an uncapped 5x
+        # spike adds ~8.5k users in ~30s; the cap spreads that climb (and the
+        # symmetric ramp-down) over ~3 min.
         current = self.runner.user_count if self.runner else 0
         spawn_rate = max(1.0, abs(target_users - current) / 30.0)
+        spawn_rate = min(spawn_rate, _MAX_SPAWN_RATE)
         return target_users, spawn_rate
 
 
@@ -314,3 +351,23 @@ class ScaleHammer(_AuthMixin, HttpUser):
     @task
     def hammer(self):
         self.client.get("/highscale/", timeout=3600)
+
+
+# ---------------------------------------------------------------------------
+# 5xx failure capture — print response headers and body to stdout so the
+# upstream proxy / HAProxy signature is visible in Anyscale job logs.
+# ---------------------------------------------------------------------------
+
+@events.request.add_listener
+def _capture_5xx(response=None, name=None, **kwargs):
+    if response is None or response.status_code not in (502, 503, 504):
+        return
+    try:
+        body = response.content[:500].decode("utf-8", errors="replace")
+    except Exception:
+        body = "<unavailable>"
+    print(
+        f"FAIL {name} status={response.status_code} "
+        f"headers={dict(response.headers)} body={body!r}",
+        flush=True,
+    )
