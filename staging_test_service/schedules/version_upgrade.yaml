@@ -1,6 +1,6 @@
 # design.md §7.2 — apply with: anyscale schedule apply -f schedules/version_upgrade.yaml
 timezone: America/Los_Angeles
-cron_expression: "0 10 * * 1"
+cron_expression: "0 10 * * 1,4"
 job_config:
   name: serve-validation-version-upgrade
   entrypoint: python upgrade_service.py --config-file anyscale_service.yaml --name serve-validation

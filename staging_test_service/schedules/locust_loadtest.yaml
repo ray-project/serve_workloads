@@ -5,7 +5,7 @@
 #   export SLACK_WEBHOOK_URL=...        # optional Slack notification webhook
 #   envsubst < schedules/locust_loadtest.yaml | anyscale schedule apply -f -
 timezone: America/Los_Angeles
-cron_expression: "0 10 * * 2,4"
+cron_expression: "30 11 * * 1,4"
 job_config:
   name: serve-validation-locust
   entrypoint: >-
