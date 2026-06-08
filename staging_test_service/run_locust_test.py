@@ -100,9 +100,14 @@ def build_slack_message(
     exit_code: int,
     stats: Optional[LocustStats],
     results_dir: Path,
+    artifact_uri: Optional[str] = None,
     error: Optional[str] = None,
 ) -> str:
     status = "PASSED" if ok else "FAILED"
+    if artifact_uri:
+        artifacts_line = f"- Artifacts: {artifact_uri}"
+    else:
+        artifacts_line = f"- Artifacts: `{results_dir}` (local, ephemeral)"
     lines = [
         f"*Locust load test {status}*",
         f"Host: {host}",
@@ -110,7 +115,7 @@ def build_slack_message(
         "*Run*",
         f"- Duration: {duration_s:.1f}s",
         f"- Exit code: {exit_code}",
-        f"- Artifacts: `{results_dir}`",
+        artifacts_line,
     ]
 
     if stats is None:
@@ -164,6 +169,45 @@ def _timestamp() -> str:
     return datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%S")
 
 
+def upload_artifacts(results_dir: Path) -> Optional[str]:
+    """Best-effort copy of the results dir to durable Anyscale storage.
+
+    Locust writes report.html / *.csv to the Job cluster's local disk, which
+    is wiped when the scheduled job's cluster tears down. Copy them to the
+    cloud object store at ``$ANYSCALE_ARTIFACT_STORAGE`` so the HTML charts and
+    per-interval stats history survive and can be downloaded after the run.
+
+    Returns the destination URI on success, else ``None``. Never raises: a
+    failed upload must not mask Locust's exit code (the regression signal).
+    """
+    base = os.environ.get("ANYSCALE_ARTIFACT_STORAGE")
+    if not base:
+        print(
+            f"ANYSCALE_ARTIFACT_STORAGE unset; results left in {results_dir} "
+            "(ephemeral on a Job cluster).",
+            file=sys.stderr,
+        )
+        return None
+
+    dest = f"{base.rstrip('/')}/locust-results/{results_dir.name}"
+    try:
+        import pyarrow.fs as pafs
+
+        dest_fs, dest_path = pafs.FileSystem.from_uri(dest)
+        for path in sorted(results_dir.rglob("*")):
+            if not path.is_file():
+                continue
+            rel = path.relative_to(results_dir).as_posix()
+            # open_output_stream creates the S3 key (or local parent dirs).
+            with dest_fs.open_output_stream(f"{dest_path}/{rel}") as out:
+                out.write(path.read_bytes())
+        print(f"Uploaded Locust artifacts to {dest}")
+        return dest
+    except Exception as exc:
+        print(f"Artifact upload to {dest} failed: {exc}", file=sys.stderr)
+        return None
+
+
 def _build_locust_command(
     *,
     locustfile: Path,
@@ -189,7 +233,6 @@ def _build_locust_command(
         str(csv_prefix),
         "--html",
         str(html_path),
-        "--only-summary",
         *extra_args,
     ]
 
@@ -267,6 +310,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
 
     duration_s = time.monotonic() - started
     stats = parse_stats_csv(stats_path)
+    artifact_uri = upload_artifacts(results_dir)
     ok = exit_code == 0
     text = build_slack_message(
         ok=ok,
@@ -275,6 +319,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         exit_code=exit_code,
         stats=stats,
         results_dir=results_dir,
+        artifact_uri=artifact_uri,
         error=error,
     )
 
