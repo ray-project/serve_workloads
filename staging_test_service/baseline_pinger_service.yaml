@@ -1,0 +1,34 @@
+# Always-on baseline traffic generator for the serve-validation service.
+# Sends a constant ~18 QPS that mirrors the locust persona mix; the scheduled
+# locust load tests run on top of this baseline.
+#
+# Deploy (expand the token placeholder through envsubst, like the locust schedules):
+#   export ANYSCALE_SERVICE_TOKEN=...   # serve-validation's bearer token
+#   envsubst < baseline_pinger_service.yaml | anyscale service deploy -f -
+#
+# Tune QPS without editing code via the BASELINE_QPS env var below.
+name: serve-validation-baseline-pinger
+
+image_uri: anyscale/ray:nightly-py310
+
+working_dir: .
+
+requirements: requirements.txt
+
+compute_config:
+  cloud: anyscale_v2_default_cloud
+  head_node:
+    # Tiny: deployments are num_cpus:0 and the client only drives ~18 QPS.
+    instance_type: m7i.xlarge
+
+env_vars:
+  ANYSCALE_SERVICE_TOKEN: "${ANYSCALE_SERVICE_TOKEN}"
+  BASELINE_QPS: "18"
+
+applications:
+  - name: baseline-pinger
+    route_prefix: /
+    import_path: baseline_pinger:build_app
+    args:
+      target_base_url: "https://serve-validation-pyz23.cld-kvedzwag2qa8i5bj.s.anyscaleuserdata-staging.com"
+      total_qps: 18

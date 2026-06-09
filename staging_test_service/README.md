@@ -15,6 +15,9 @@ anyscale_service.yaml      # Anyscale Service config (deploy)
 locustfile.py              # Locust load test — 8 personas, diurnal schedule
 run_locust_test.py         # Locust Scheduled Job wrapper — posts final results to Slack
 upgrade_service.py         # Weekly version-upgrade script
+traffic_model.py           # Shared request mix + payload factories (locust + baseline pinger)
+baseline_pinger.py         # Always-on baseline traffic generator (separate Serve service)
+baseline_pinger_service.yaml   # Anyscale Service config — deploy the baseline pinger
 schedules/
   version_upgrade.yaml     # Anyscale Scheduled Job — weekly redeploy
   locust_loadtest.yaml       # Anyscale Scheduled Job — Tue/Thu 60-minute load test
@@ -94,6 +97,30 @@ Tune scale via environment variables:
 | `SLACK_WEBHOOK_URL` | — | Optional Slack incoming webhook for final Locust result notification |
 | `LOCUST_RESULTS_ROOT` | `/tmp/locust-results` | Root directory for Locust CSV/HTML artifacts |
 | `LOCUST_PROCESSES` | `16` | Default process count used by `run_locust_test.py` |
+
+## Baseline traffic (always-on)
+
+`baseline_pinger.py` is a separate Anyscale Service that sends a constant low QPS
+(~18 by default) to the live service 24/7, mirroring the Locust persona mix via
+the shared `traffic_model.py`. This keeps realistic, continuous traffic on the
+deployments so the scheduled Locust load tests ride on top of a non-zero baseline
+instead of starting from idle.
+
+Deploy it once (separate from the serve-validation service itself):
+
+```bash
+export ANYSCALE_SERVICE_TOKEN=...   # serve-validation's bearer token
+envsubst < baseline_pinger_service.yaml | anyscale service deploy -f -
+```
+
+Tune the rate with the `BASELINE_QPS` env var in `baseline_pinger_service.yaml`
+(or live via the deployment's `total_qps` user_config). Metrics are exported as
+`baseline_pinger_*` tagged `source=baseline` for Grafana. The request mix is ~98%
+echo + highscale by design (it mirrors real-usage weights), so the always-on cost
+is dominated by the cheap apps.
+
+The baseline pinger is **not** scheduled — it runs continuously; the load tests
+below spike on top of it.
 
 ## Scheduled jobs
 

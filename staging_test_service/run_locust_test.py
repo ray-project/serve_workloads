@@ -17,6 +17,14 @@ from pathlib import Path
 from typing import Optional, Sequence
 
 
+# Notion doc defining the load-test acceptance criteria (linked in the Slack summary).
+ACCEPTANCE_CRITERIA_URL = (
+    "https://app.notion.com/p/anyscale-hq/"
+    "Staging-Test-Service-in-review-375027c809cb80619eb0c0432c7519eb"
+    "?source=copy_link#379027c809cb8066aa3afdb268e6b7f1"
+)
+
+
 @dataclass(frozen=True)
 class LocustStats:
     request_count: int
@@ -142,6 +150,7 @@ def build_slack_message(
     lines.extend(
         [
             "",
+            f"Acceptance criteria: <{ACCEPTANCE_CRITERIA_URL}|Staging Test Service>",
             (
                 "_Note: If the failure rate is >= 0.01%, this may signify "
                 "a regression and should be investigated._"
