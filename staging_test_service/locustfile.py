@@ -32,6 +32,11 @@ from requests.exceptions import ConnectionError as ReqConnectionError
 
 import locust.stats
 
+from traffic_model import (
+    nlp_payload, image_payload, fanout_payload, mixed_payload,
+    mux_payload, mux_headers, stream_payload, heavy_payload, long_payload,
+)
+
 # Print the periodic request-stats table every 5s instead of locust's 2s
 # default (less log spam over a 30-60 min run), and chart p50/p95/p99/p99.9
 # in the --html report's response-time graph (locust's default is only
@@ -78,27 +83,8 @@ class _AuthMixin:
         self.client.request = _retrying_request
 
 
-# ---------------------------------------------------------------------------
-# Zipfian distribution for model-switcher persona (§5.1)
-# 80% of traffic to 4 out of 20 models
-# ---------------------------------------------------------------------------
-
-_NUM_MODELS = 20
-_ZIPF_WEIGHTS: List[float] = [1.0 / (i + 1) ** 1.2 for i in range(_NUM_MODELS)]
-_ZIPF_TOTAL = sum(_ZIPF_WEIGHTS)
-_ZIPF_CDF: List[float] = []
-_acc = 0.0
-for _w in _ZIPF_WEIGHTS:
-    _acc += _w / _ZIPF_TOTAL
-    _ZIPF_CDF.append(_acc)
-
-
-def _zipf_model_id() -> str:
-    r = random.random()
-    for idx, c in enumerate(_ZIPF_CDF):
-        if r <= c:
-            return str(idx)
-    return str(_NUM_MODELS - 1)
+# Zipfian model-id distribution and per-persona payload factories now live in
+# traffic_model.py (shared with baseline_pinger.py) — imported above.
 
 
 # ---------------------------------------------------------------------------
@@ -210,22 +196,20 @@ class PipelineUser(_AuthMixin, HttpUser):
 
     @task(3)
     def nlp(self):
-        payload = os.urandom(random.randint(64, 512))
-        self.client.post("/nlp-chain/", data=payload, timeout=3600)
+        self.client.post("/nlp-chain/", data=nlp_payload(), timeout=3600)
 
     @task(2)
     def image(self):
-        # Simulate 2-10 MB image upload (design.md §3.3)
-        size = random.randint(2 * 1024, 10 * 1024)  # 2-10 KB compressed stand-in
-        self.client.post("/image-dag/", data=os.urandom(size), timeout=3600)
+        # Simulate 2-10 MB image upload (design.md §3.3); size range in traffic_model.
+        self.client.post("/image-dag/", data=image_payload(), timeout=3600)
 
     @task(2)
     def fanout(self):
-        self.client.post("/cpu-fanout/", data=os.urandom(random.randint(32, 256)), timeout=3600)
+        self.client.post("/cpu-fanout/", data=fanout_payload(), timeout=3600)
 
     @task(1)
     def mixed(self):
-        self.client.post("/mixed-preprocess/", data=os.urandom(random.randint(64, 512)), timeout=3600)
+        self.client.post("/mixed-preprocess/", data=mixed_payload(), timeout=3600)
 
 
 # ---------------------------------------------------------------------------
@@ -262,14 +246,13 @@ class StreamConsumer(_AuthMixin, HttpUser):
 
     @task
     def sse(self):
-        tokens = random.randint(5, 40)
-        duration = random.uniform(2.0, 15.0)
+        payload = stream_payload()
         with self.client.post(
             "/stream-chat/",
-            json={"tokens": tokens, "duration_s": duration},
+            json=payload,
             stream=True,
             catch_response=True,
-            timeout=max(3600, duration * 3),
+            timeout=max(3600, payload["duration_s"] * 3),
         ) as resp:
             if resp.status_code == 200:
                 for _ in resp.iter_content(chunk_size=4096):
@@ -289,11 +272,12 @@ class ModelSwitcher(_AuthMixin, HttpUser):
 
     @task
     def switch(self):
-        model_id = _zipf_model_id()
+        headers = mux_headers()
+        model_id = headers["serve_multiplexed_model_id"]
         self.client.post(
             "/mux/",
-            json={"q": f"query-{random.randint(0, 999)}"},
-            headers={"serve_multiplexed_model_id": model_id},
+            json=mux_payload(),
+            headers=headers,
             name=f"/mux/ [model={model_id}]",
             timeout=3600,
         )
@@ -310,10 +294,9 @@ class HeavyUploader(_AuthMixin, HttpUser):
 
     @task
     def upload(self):
-        mb = random.uniform(5.0, 50.0)
         self.client.post(
             "/heavy-payload/",
-            json={"mb": round(mb, 1)},
+            json=heavy_payload(),
             timeout=3600,
             name="/heavy-payload/",
         )
@@ -330,10 +313,9 @@ class LongTaskSubmitter(_AuthMixin, HttpUser):
 
     @task
     def submit(self):
-        seconds = random.uniform(30.0, 120.0)
         self.client.post(
             "/long-runner/",
-            json={"seconds": round(seconds, 1)},
+            json=long_payload(),
             timeout=3600,
             name="/long-runner/",
         )
