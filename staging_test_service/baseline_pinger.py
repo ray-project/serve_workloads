@@ -11,7 +11,7 @@ import asyncio
 import logging
 import os
 import random
-from typing import Optional, Set
+from typing import Dict, Optional, Set
 
 import aiohttp
 from aiohttp.client_exceptions import ClientOSError
@@ -27,6 +27,11 @@ from traffic_model import build_request, choose_endpoint
 
 logger = logging.getLogger("ray.serve")
 api = FastAPI()
+
+# Endpoints whose timeout exceeds this are gated separately from the fast
+# majority, so a stuck slow request can never block baseline traffic.
+SLOW_TIER_TIMEOUT_THRESHOLD_S = 15.0
+SLOW_TIER_MAX_IN_FLIGHT = 10
 
 
 class BaselinePingerArgs(BaseModel):
@@ -47,7 +52,8 @@ class BaselinePinger:
         self.total_qps = 18.0
         self._rng = random.Random()
         self._loop_task: Optional[asyncio.Task] = None
-        self._pending: Set[asyncio.Future] = set()
+        self._pending: Dict[str, Set[asyncio.Future]] = {"fast": set(), "slow": set()}
+        self._last_skip_log: Dict[str, float] = {}
         self._init_metrics()
 
     async def reconfigure(self, config: dict):
@@ -72,33 +78,57 @@ class BaselinePinger:
             "baseline_pinger_request_latency_s", "Latency of the last request.", tag_keys=tk
         ).set_default_tags({"source": "baseline"})
         self.pend = Gauge(
-            "baseline_pinger_pending_requests", "In-flight requests.", tag_keys=("source",)
+            "baseline_pinger_pending_requests", "In-flight requests per tier.",
+            tag_keys=("source", "tier"),
+        ).set_default_tags({"source": "baseline"})
+        self.skipped = Counter(
+            "baseline_pinger_sends_skipped",
+            "Sends skipped because the tier's in-flight cap was reached.",
+            tag_keys=("source", "tier"),
         ).set_default_tags({"source": "baseline"})
 
     async def _run_loop(self):
         send_interval_s = 1.0 / self.total_qps
+        caps = {"fast": 2.5 * self.total_qps, "slow": SLOW_TIER_MAX_IN_FLIGHT}
+        # Retry only instant connection-level errors (stale keep-alive sockets
+        # killed by the LB). Never retry timeouts or 5xx: for a constant-rate
+        # generator the next scheduled send IS the retry, and a slot held
+        # across 130s timeout attempts starves the send budget for minutes.
         retry = ExponentialRetry(
-            attempts=3, start_timeout=0.5, factor=2,
-            exceptions=[asyncio.TimeoutError, aiohttp.ServerDisconnectedError, ClientOSError],
+            attempts=3, start_timeout=0.25, factor=2,
+            exceptions=[aiohttp.ServerDisconnectedError, ClientOSError],
+            retry_all_server_errors=False,
         )
+        loop = asyncio.get_event_loop()
         async with RetryClient(retry_options=retry) as client:
+            next_send = loop.time()
             while True:
-                start = asyncio.get_event_loop().time()
-                # Backpressure: never let more than ~2.5s of traffic pile up.
-                if len(self._pending) < 2.5 * self.total_qps:
-                    ep = choose_endpoint(self._rng)
-                    self._pending.add(asyncio.ensure_future(self._send(client, ep)))
+                ep = choose_endpoint(self._rng)
+                tier = "slow" if ep.timeout_s > SLOW_TIER_TIMEOUT_THRESHOLD_S else "fast"
+                pending = self._pending[tier]
+                if len(pending) < caps[tier]:
+                    pending.add(asyncio.ensure_future(self._send(client, ep)))
                 else:
-                    logger.warning(
-                        f"baseline pinger backpressure: {len(self._pending)} in flight; "
-                        "skipping this send."
-                    )
-                if self._pending:
-                    _, self._pending = await asyncio.wait(self._pending, timeout=0)
-                self.pend.set(len(self._pending))
-                remaining = send_interval_s - (asyncio.get_event_loop().time() - start)
-                if remaining > 0:
-                    await asyncio.sleep(remaining)
+                    self.skipped.inc(tags={"tier": tier})
+                    now = loop.time()
+                    if now - self._last_skip_log.get(tier, 0.0) > 5.0:
+                        self._last_skip_log[tier] = now
+                        logger.warning(
+                            f"baseline pinger {tier} tier at capacity "
+                            f"({len(pending)} in flight); skipping sends."
+                        )
+                for t, futs in self._pending.items():
+                    self._pending[t] = {f for f in futs if not f.done()}
+                    self.pend.set(len(self._pending[t]), tags={"tier": t})
+                # Absolute-deadline pacing: relative sleeps accumulate timer
+                # overshoot (~2ms/tick == only ~17.4 of 18 QPS). On a stall
+                # of the loop itself, resync instead of bursting to catch up.
+                next_send += send_interval_s
+                now = loop.time()
+                if next_send < now - 1.0:
+                    next_send = now
+                if next_send > now:
+                    await asyncio.sleep(next_send - now)
 
     async def _send(self, client: RetryClient, ep):
         req = build_request(ep, self.target_base_url)
@@ -110,7 +140,7 @@ class BaselinePinger:
                 req.method, req.url,
                 json=req.json, data=req.data,
                 headers={**req.headers, "Authorization": f"Bearer {self.bearer_token}"},
-                timeout=aiohttp.ClientTimeout(total=130),
+                timeout=aiohttp.ClientTimeout(total=ep.timeout_s),
             ) as resp:
                 await resp.read()  # drain body (covers streaming + heavy payloads)
                 (self.ok if resp.status == 200 else self.bad).inc(tags=tags)

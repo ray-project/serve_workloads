@@ -90,6 +90,11 @@ class Endpoint:
     json_factory: Optional[Callable[[], dict]] = None
     data_factory: Optional[Callable[[], bytes]] = None
     headers_factory: Optional[Callable[[], Dict[str, str]]] = None
+    # Client-side total timeout for ONE request attempt. ~2x worst healthy
+    # latency: a stuck request must release its in-flight slot quickly, or
+    # rate generators stall on it. long covers the 125s max sleep + cold
+    # start while staying under the proxy's request_timeout_s=180.
+    timeout_s: float = 10.0
 
 
 # Weights = the request-level mix derived from locustfile.py personas:
@@ -101,14 +106,14 @@ ENDPOINTS: List[Endpoint] = [
     Endpoint("highscale", "GET",  "/highscale/",       76.0),
     Endpoint("echo",      "GET",  "/echo/",            22.0),
     Endpoint("mux",       "POST", "/mux/",              0.75, json_factory=mux_payload, headers_factory=mux_headers),
-    Endpoint("stream",    "POST", "/stream-chat/",      0.20, json_factory=stream_payload),
+    Endpoint("stream",    "POST", "/stream-chat/",      0.20, json_factory=stream_payload, timeout_s=30.0),
     Endpoint("nlp",       "POST", "/nlp-chain/",        0.14, data_factory=nlp_payload),
     Endpoint("image",     "POST", "/image-dag/",        0.09, data_factory=image_payload),
     Endpoint("fanout",    "POST", "/cpu-fanout/",       0.09, data_factory=fanout_payload),
     Endpoint("batch",     "POST", "/batch-infer/",      0.08, json_factory=batch_payload),
     Endpoint("mixed",     "POST", "/mixed-preprocess/", 0.05, data_factory=mixed_payload),
-    Endpoint("heavy",     "POST", "/heavy-payload/",    0.015, json_factory=heavy_payload),
-    Endpoint("long",      "POST", "/long-runner/",      0.009, json_factory=long_payload),
+    Endpoint("heavy",     "POST", "/heavy-payload/",    0.015, json_factory=heavy_payload, timeout_s=60.0),
+    Endpoint("long",      "POST", "/long-runner/",      0.009, json_factory=long_payload, timeout_s=150.0),
 ]
 
 
