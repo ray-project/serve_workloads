@@ -43,7 +43,7 @@ http_options:
   # design SLO P99 < 130s). Note: the Anyscale platform Envoy/ALB has its own
   # idle/request timeout (~300s observed) that this YAML cannot override; for
   # caps above 300s, escalate to the Anyscale platform team.
-  request_timeout_s: 3600
+  request_timeout_s: 180
   keep_alive_timeout_s: 3600
 
 grpc_options:
@@ -73,10 +73,10 @@ env_vars:
   # RAY_SERVE_HAPROXY_RELOAD_TIMEOUT_S: "60"
   RAY_SERVE_HAPROXY_RETRIES: "1000" # check this later ----
 
-  RAY_SERVE_HAPROXY_HARD_STOP_AFTER_S: "1800"
-  RAY_SERVE_HAPROXY_TIMEOUT_SERVER_S: "3600"
+  RAY_SERVE_HAPROXY_HARD_STOP_AFTER_S: "300"
+  RAY_SERVE_HAPROXY_TIMEOUT_SERVER_S: "240"
   RAY_SERVE_HAPROXY_TIMEOUT_CONNECT_S: "5"
-  RAY_SERVE_PORT_QUARANTINE_S: "900"
+  RAY_SERVE_PORT_QUARANTINE_S: "360"
   RAY_SERVE_QUEUE_LENGTH_RESPONSE_DEADLINE_S: "0.5"
   RAY_SERVE_HAPROXY_BROADCAST_COALESCE_S: "0.5"
 
