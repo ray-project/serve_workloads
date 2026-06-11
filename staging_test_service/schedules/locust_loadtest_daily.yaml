@@ -14,6 +14,8 @@ job_config:
   env_vars:
     ANYSCALE_SERVICE_TOKEN: "${ANYSCALE_SERVICE_TOKEN}"
     SLACK_WEBHOOK_URL: "${SLACK_WEBHOOK_URL}"
+    SLACK_BOT_TOKEN: "${SLACK_BOT_TOKEN}"
+    SLACK_CHANNEL: "${SLACK_CHANNEL}"
     LOCUST_RUN_MINUTES: "15"
   working_dir: .
   requirements: requirements.txt
