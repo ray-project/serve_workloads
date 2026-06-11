@@ -94,7 +94,9 @@ Tune scale via environment variables:
 | `LOCUST_RUN_MINUTES` | `150` | Total run duration (24-hour cycle compressed into this) |
 | `LOCUST_PEAK_USERS` | `2000` | Locust user count at 1.0x load multiplier |
 | `ANYSCALE_SERVICE_TOKEN` | — | Bearer token for Anyscale Service auth |
-| `SLACK_WEBHOOK_URL` | — | Optional Slack incoming webhook for final Locust result notification |
+| `SLACK_BOT_TOKEN` | — | Slack bot token (`xoxb-…`); enables the threaded result post (summary + acceptance-criteria, percentiles, and P50-ratio replies) |
+| `SLACK_CHANNEL` | — | Slack channel ID (or public channel name) for the threaded result post |
+| `SLACK_WEBHOOK_URL` | — | Fallback Slack incoming webhook; used only when the bot token/channel are unset (single message, no thread) |
 | `LOCUST_RESULTS_ROOT` | `/tmp/locust-results` | Root directory for Locust CSV/HTML artifacts |
 | `LOCUST_PROCESSES` | `16` | Default process count used by `run_locust_test.py` |
 
@@ -154,7 +156,8 @@ anyscale schedule run --name serve-validation-locust-daily
 |---|---|---|
 | `ANYSCALE_SERVICE_CONFIG` | `upgrade_service.py` | Path to service YAML (default: `anyscale_service.yaml`) |
 | `UPGRADE_WAIT_TIMEOUT_S` | `upgrade_service.py` | Timeout for `anyscale service wait` (default: `1200`) |
-| `SLACK_WEBHOOK_URL` | `upgrade_service.py`, `run_locust_test.py` | Slack incoming webhook for deploy and Locust result notifications |
+| `SLACK_BOT_TOKEN`, `SLACK_CHANNEL` | `run_locust_test.py` | Slack Web API credentials for the threaded Locust result post |
+| `SLACK_WEBHOOK_URL` | `upgrade_service.py`, `run_locust_test.py` | Slack incoming webhook for deploy notifications; Locust fallback when bot token unset |
 | `ANYSCALE_SERVICE_TOKEN` | `locustfile.py` | Bearer token injected into all Locust requests |
 | `LOCUST_PEAK_USERS` | `locustfile.py` | User count at 1.0x load (default: `2000`) |
 | `LOCUST_RUN_MINUTES` | `locustfile.py` | Run duration in minutes (default: `150`) |
