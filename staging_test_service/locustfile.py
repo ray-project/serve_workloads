@@ -336,6 +336,71 @@ class ScaleHammer(_AuthMixin, HttpUser):
 
 
 # ---------------------------------------------------------------------------
+# Per-deployment percentiles — written next to the --csv artifacts at test
+# stop. The stats CSV has one row per request *name* (mux alone fans out to
+# 20 "[model=N]" rows), and percentiles of separate rows cannot be merged
+# after the fact; here locust's in-memory response-time histograms are merged
+# per deployment first, so the percentiles are exact. Consumed by
+# run_locust_test.py for the Slack thread tables.
+# ---------------------------------------------------------------------------
+
+DEPLOYMENT_PERCENTILES = (
+    (0.5, "p50"), (0.90, "p90"), (0.95, "p95"), (0.99, "p99"), (0.999, "p99.9")
+)
+
+
+def _deployment_of(name: str) -> str:
+    """Map a locust request name to its deployment route prefix.
+
+    "/mux/ [model=3]" -> "/mux/"; "/batch-infer/ [burst]" -> "/batch-infer/".
+    """
+    return name.split(" [", 1)[0]
+
+
+@events.test_stop.add_listener
+def _dump_deployment_percentiles(environment, **kwargs):
+    from locust.runners import WorkerRunner
+    from locust.stats import calculate_response_time_percentile
+
+    if isinstance(environment.runner, WorkerRunner):
+        return  # only the master has the merged stats
+    csv_prefix = getattr(environment.parsed_options, "csv_prefix", None)
+    if not csv_prefix:
+        return
+
+    groups: dict = {}
+    for entry in environment.stats.entries.values():
+        if not entry.num_requests:
+            continue
+        g = groups.setdefault(
+            _deployment_of(entry.name),
+            {"requests": 0, "failures": 0, "response_times": {}},
+        )
+        g["requests"] += entry.num_requests
+        g["failures"] += entry.num_failures
+        for rt, count in entry.response_times.items():
+            g["response_times"][rt] = g["response_times"].get(rt, 0) + count
+
+    out = {}
+    for name, g in sorted(groups.items()):
+        out[name] = {
+            "requests": g["requests"],
+            "failures": g["failures"],
+            **{
+                label: calculate_response_time_percentile(
+                    g["response_times"], g["requests"], p
+                )
+                for p, label in DEPLOYMENT_PERCENTILES
+            },
+        }
+
+    path = f"{csv_prefix}_deployments.json"
+    with open(path, "w") as fh:
+        json.dump(out, fh, indent=2)
+    print(f"Wrote per-deployment percentiles to {path}", flush=True)
+
+
+# ---------------------------------------------------------------------------
 # 5xx failure capture — print response headers and body to stdout so the
 # upstream proxy / HAProxy signature is visible in Anyscale job logs.
 # ---------------------------------------------------------------------------

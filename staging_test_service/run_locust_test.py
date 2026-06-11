@@ -31,11 +31,6 @@ class LocustStats:
     failure_count: int
     avg_response_ms: Optional[float]
     requests_per_s: Optional[float]
-    p50_ms: Optional[float]
-    p90_ms: Optional[float]
-    p95_ms: Optional[float]
-    p99_ms: Optional[float]
-    p999_ms: Optional[float]
 
     @property
     def failure_rate(self) -> float:
@@ -74,11 +69,6 @@ def parse_stats_csv(stats_path: Path) -> Optional[LocustStats]:
                 failure_count=_int_value(row.get("Failure Count")),
                 avg_response_ms=_float_value(row.get("Average Response Time")),
                 requests_per_s=_float_value(row.get("Requests/s")),
-                p50_ms=_float_value(row.get("50%")),
-                p90_ms=_float_value(row.get("90%")),
-                p95_ms=_float_value(row.get("95%")),
-                p99_ms=_float_value(row.get("99%")),
-                p999_ms=_float_value(row.get("99.9%")),
             )
 
     return None
@@ -98,12 +88,6 @@ def _format_optional_rate(value: Optional[float]) -> str:
 
 def _format_failure_rate(rate: float) -> str:
     return f"{rate * 100:.4f}%"
-
-
-def _format_percentile_pair(p95_ms: Optional[float], p99_ms: Optional[float]) -> str:
-    if p95_ms is None or p99_ms is None:
-        return f"{_format_optional_ms(p95_ms)} / {_format_optional_ms(p99_ms)}"
-    return f"{p95_ms:.2f} / {p99_ms:.2f} ms"
 
 
 def build_slack_message(
@@ -146,7 +130,7 @@ def build_slack_message(
                 ),
                 f"- RPS: {_format_optional_rate(stats.requests_per_s)}",
                 f"- Avg latency: {_format_optional_ms(stats.avg_response_ms)}",
-                f"- P95/P99: {_format_percentile_pair(stats.p95_ms, stats.p99_ms)}",
+                "- Per-deployment percentiles: in this thread",
             ]
         )
 
@@ -156,15 +140,118 @@ def build_slack_message(
     return "\n".join(lines)
 
 
-# Latency-shape bands (ratio to P50) from the acceptance criteria doc:
-# (label, stats attribute, healthy range, warning threshold).
+# Latency-shape bands (each percentile as a ratio of the deployment's own
+# P50) from the acceptance criteria doc: (label, attribute, warning threshold).
 RATIO_BANDS = (
-    ("P50", "p50_ms", "baseline", None),
-    ("P90", "p90_ms", "1.2x - 1.5x", 3.0),
-    ("P95", "p95_ms", "1.5x - 2.5x", 4.0),
-    ("P99", "p99_ms", "3x - 5x", 10.0),
-    ("P99.9", "p999_ms", "10x - 20x", 50.0),
+    ("P90", "p90_ms", 3.0),
+    ("P95", "p95_ms", 4.0),
+    ("P99", "p99_ms", 10.0),
+    ("P99.9", "p999_ms", 50.0),
 )
+RATIO_LEGEND = (
+    "Healthy: P90 1.2-1.5x, P95 1.5-2.5x, P99 3-5x, P99.9 10-20x of own P50; "
+    "`!` marks warning (P90 >3x, P95 >4x, P99 >10x, P99.9 >50x)."
+)
+
+
+@dataclass(frozen=True)
+class DeploymentStats:
+    name: str
+    requests: int
+    failures: int
+    p50_ms: Optional[float]
+    p90_ms: Optional[float]
+    p95_ms: Optional[float]
+    p99_ms: Optional[float]
+    p999_ms: Optional[float]
+    approx: bool = False  # True when merged from per-name CSV rows
+
+
+def load_deployment_stats(json_path: Path) -> Optional[list[DeploymentStats]]:
+    """Read the exact per-deployment percentiles the locustfile writes at
+    test stop (run_deployments.json). Returns None if absent/unreadable."""
+    if not json_path.is_file():
+        return None
+    try:
+        raw = json.loads(json_path.read_text())
+        deployments = [
+            DeploymentStats(
+                name=name,
+                requests=int(d.get("requests", 0)),
+                failures=int(d.get("failures", 0)),
+                p50_ms=d.get("p50"),
+                p90_ms=d.get("p90"),
+                p95_ms=d.get("p95"),
+                p99_ms=d.get("p99"),
+                p999_ms=d.get("p99.9"),
+            )
+            for name, d in raw.items()
+        ]
+    except Exception as exc:
+        print(f"Could not parse {json_path}: {exc}", file=sys.stderr)
+        return None
+    return sorted(deployments, key=lambda d: -d.requests) or None
+
+
+def deployment_stats_from_csv(stats_path: Path) -> Optional[list[DeploymentStats]]:
+    """Fallback when run_deployments.json is missing: group the stats CSV's
+    per-name rows by deployment route prefix. Multi-row groups (e.g. mux's
+    "[model=N]" rows) get request-count-weighted percentiles — an
+    approximation (marked with ~), since percentiles cannot be merged
+    exactly after the fact."""
+    if not stats_path.is_file():
+        return None
+    groups: dict = {}
+    with stats_path.open(newline="") as fh:
+        for row in csv.DictReader(fh):
+            name = row.get("Name", "").strip()
+            if not name or name.lower() == "aggregated":
+                continue
+            count = _int_value(row.get("Request Count"))
+            if count <= 0:
+                continue
+            groups.setdefault(name.split(" [", 1)[0], []).append((count, row))
+
+    deployments = []
+    for name, rows in groups.items():
+        total = sum(count for count, _ in rows)
+        failures = sum(_int_value(row.get("Failure Count")) for _, row in rows)
+
+        def merged(col: str) -> Optional[float]:
+            acc = 0.0
+            for count, row in rows:
+                value = _float_value(row.get(col))
+                if value is None:
+                    return None
+                acc += count * value
+            return acc / total
+
+        deployments.append(
+            DeploymentStats(
+                name=name,
+                requests=total,
+                failures=failures,
+                p50_ms=merged("50%"),
+                p90_ms=merged("90%"),
+                p95_ms=merged("95%"),
+                p99_ms=merged("99%"),
+                p999_ms=merged("99.9%"),
+                approx=len(rows) > 1,
+            )
+        )
+    return sorted(deployments, key=lambda d: -d.requests) or None
+
+
+def _name_width(deployments: list[DeploymentStats]) -> int:
+    return max(12, max(len(d.name) + (1 if d.approx else 0) for d in deployments) + 2)
+
+
+def _display_name(dep: DeploymentStats) -> str:
+    return f"~{dep.name}" if dep.approx else dep.name
+
+
+def _format_ms_cell(value: Optional[float]) -> str:
+    return "-" if value is None else f"{value:,.0f}"
 
 
 def build_criteria_reply() -> str:
@@ -180,47 +267,67 @@ def build_criteria_reply() -> str:
     )
 
 
-def build_percentiles_reply(stats: Optional[LocustStats]) -> str:
-    """Thread reply 2: response-time percentiles of the aggregated run."""
-    if stats is None:
-        return "*Response time percentiles*\nNo Locust stats CSV was produced."
-    lines = ["*Response time percentiles* (aggregated)"]
-    for label, attr, _, _ in RATIO_BANDS:
-        lines.append(f"- {label}: {_format_optional_ms(getattr(stats, attr))}")
+def build_percentiles_reply(deployments: Optional[list[DeploymentStats]]) -> str:
+    """Thread reply 2: response-time percentiles per deployment."""
+    header = "*Response time percentiles by deployment* (ms)"
+    if not deployments:
+        return f"{header}\nNo Locust stats were produced."
+    width = _name_width(deployments)
+    rows = [
+        f"{'Deployment':<{width}}{'Requests':>10}{'P50':>9}{'P90':>9}"
+        f"{'P95':>9}{'P99':>9}{'P99.9':>9}"
+    ]
+    for dep in deployments:
+        rows.append(
+            f"{_display_name(dep):<{width}}{dep.requests:>10,}"
+            f"{_format_ms_cell(dep.p50_ms):>9}{_format_ms_cell(dep.p90_ms):>9}"
+            f"{_format_ms_cell(dep.p95_ms):>9}{_format_ms_cell(dep.p99_ms):>9}"
+            f"{_format_ms_cell(dep.p999_ms):>9}"
+        )
+    lines = [header, "```", *rows, "```"]
+    if any(d.approx for d in deployments):
+        lines.append("_~ approximated: merged from per-name CSV rows._")
     return "\n".join(lines)
 
 
-def build_ratio_reply(stats: Optional[LocustStats]) -> str:
-    """Thread reply 3: latency shape as ratio-to-P50, warnings marked."""
-    header = "*Latency shape* (ratio to P50)"
-    if stats is None:
-        return f"{header}\nNo Locust stats CSV was produced."
-    if not stats.p50_ms or stats.p50_ms <= 0:
-        return f"{header}\nP50 unavailable; cannot compute ratios."
+def build_ratio_reply(deployments: Optional[list[DeploymentStats]]) -> str:
+    """Thread reply 3: per deployment, each percentile as a ratio of that
+    deployment's own P50, with warning-threshold breaches marked."""
+    header = "*Latency shape by deployment* (ratio to own P50)"
+    if not deployments:
+        return f"{header}\nNo Locust stats were produced."
 
-    rows = [f"{'Percentile':<11}{'Actual':>12}{'Ratio':>9}  {'Healthy':<13}{'Warning':<9}"]
+    width = _name_width(deployments)
+    rows = [
+        f"{'Deployment':<{width}}{'P50(ms)':>9}{'P90':>8}{'P95':>8}{'P99':>8}{'P99.9':>8}"
+    ]
     breached = []
-    for label, attr, healthy, warn_threshold in RATIO_BANDS:
-        value = getattr(stats, attr)
-        if value is None:
-            rows.append(f"{label:<11}{'N/A':>12}{'N/A':>9}  {healthy:<13}{'-':<9}")
-            continue
-        ratio = value / stats.p50_ms
-        warn_col = f">{warn_threshold:g}x" if warn_threshold else "-"
-        mark = ""
-        if warn_threshold and ratio > warn_threshold:
-            mark = "  << WARNING"
-            breached.append(f"{label} is {ratio:.1f}x P50 (warning threshold >{warn_threshold:g}x)")
+    for dep in deployments:
+        cells = []
+        dep_breaches = []
+        for label, attr, warn_threshold in RATIO_BANDS:
+            value = getattr(dep, attr)
+            if not dep.p50_ms or dep.p50_ms <= 0 or value is None:
+                cells.append("-")
+                continue
+            ratio = value / dep.p50_ms
+            mark = ""
+            if ratio > warn_threshold:
+                mark = "!"
+                dep_breaches.append(f"{label} {ratio:.1f}x (>{warn_threshold:g}x)")
+            cells.append(f"{ratio:.1f}x{mark}")
         rows.append(
-            f"{label:<11}{_format_optional_ms(value):>12}{f'{ratio:.1f}x':>9}"
-            f"  {healthy:<13}{warn_col:<9}{mark}"
+            f"{_display_name(dep):<{width}}{_format_ms_cell(dep.p50_ms):>9}"
+            f"{cells[0]:>8}{cells[1]:>8}{cells[2]:>8}{cells[3]:>8}"
         )
+        if dep_breaches:
+            breached.append(f":warning: `{dep.name}`: {', '.join(dep_breaches)}")
 
-    lines = [header, "```", *rows, "```"]
+    lines = [header, "```", *rows, "```", RATIO_LEGEND]
     if breached:
-        lines.extend(f":warning: {msg}" for msg in breached)
+        lines.extend(breached)
     else:
-        lines.append("All percentile ratios are below their warning thresholds.")
+        lines.append("All deployments are below the warning thresholds.")
     return "\n".join(lines)
 
 
@@ -447,10 +554,13 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         error=error,
     )
 
+    deployments = load_deployment_stats(
+        results_dir / "run_deployments.json"
+    ) or deployment_stats_from_csv(stats_path)
     replies = [
         build_criteria_reply(),
-        build_percentiles_reply(stats),
-        build_ratio_reply(stats),
+        build_percentiles_reply(deployments),
+        build_ratio_reply(deployments),
     ]
     print("\n\n".join([text, *replies]))
 
