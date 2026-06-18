@@ -65,6 +65,22 @@ AUTOSCALE_LONG_RUNNER = AutoscalingConfig(
 )
 
 
+# highscale-stress: keep target=1 (1 replica per in-flight request, so it still
+# scales to its 1536 max under load); a small min floor keeps the always-on N=1
+# baseline pinned at 2 replicas instead of oscillating at the target=1 boundary.
+AUTOSCALE_HIGHSCALE = AUTOSCALE_SPIKY.copy(update={"min_replicas": 2})
+
+# batch-infer + cpu-fanout: raise target to 2 so the N=1 baseline settles at a
+# single replica with margin (no boundary churn). Halves their under-load scale,
+# which is fine -- they are not the scale-to-1536 deployment.
+AUTOSCALE_SPIKY_T2 = AUTOSCALE_SPIKY.copy(update={"target_ongoing_requests": 2})
+
+# heavy-payload: the pinger paces heavy to ~2 req/s (a 1 MB canary), so its ongoing
+# requests sit near zero and the autoscaler would scale it to zero and oscillate
+# 0<->1. Pin a floor of 1 to keep it warm. (locust still drives 5-50 MB at load.)
+AUTOSCALE_HEAVY = AUTOSCALE_GROWTH.copy(update={"min_replicas": 1})
+
+
 def _with_max(base: AutoscalingConfig, max_replicas: int) -> AutoscalingConfig:
     return base.copy(update={"max_replicas": max_replicas})
 

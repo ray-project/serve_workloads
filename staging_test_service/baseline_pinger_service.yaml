@@ -1,12 +1,14 @@
 # Always-on baseline traffic generator for the serve-validation service.
-# Sends a constant ~18 QPS that mirrors the locust persona mix; the scheduled
-# locust load tests run on top of this baseline.
+# Holds a fixed number of in-flight requests per deployment (closed-loop: refill
+# on completion) to keep each app exercised; the scheduled locust load tests run
+# on top of this baseline. HTTP-only.
 #
 # Deploy (expand the token placeholder through envsubst, like the locust schedules):
 #   export ANYSCALE_SERVICE_TOKEN=...   # serve-validation's bearer token
 #   envsubst < baseline_pinger_service.yaml | anyscale service deploy -f -
 #
-# Tune QPS without editing code via the BASELINE_QPS env var below.
+# Tune pool size without editing code via BASELINE_DEFAULT_CONCURRENCY below
+# (default 1 in flight per deployment).
 name: serve-validation-baseline-pinger
 
 image_uri: anyscale/ray:nightly-py310
@@ -18,12 +20,14 @@ requirements: requirements.txt
 compute_config:
   cloud: anyscale_v2_default_cloud
   head_node:
-    # Tiny: deployments are num_cpus:0 and the client only drives ~18 QPS.
-    instance_type: m7i.xlarge
+    # BaselinePinger runs num_cpus:2 (set in code): the single send loop holds
+    # ~11 in-flight (1 per deployment) + body reads and needs dedicated cores.
+    # Bump the instance further if the loop saturates at larger pool sizes.
+    instance_type: m7i.2xlarge
 
 env_vars:
   ANYSCALE_SERVICE_TOKEN: "${ANYSCALE_SERVICE_TOKEN}"
-  BASELINE_QPS: "18"
+  BASELINE_DEFAULT_CONCURRENCY: "1"
 
 applications:
   - name: baseline-pinger
@@ -31,4 +35,3 @@ applications:
     import_path: baseline_pinger:build_app
     args:
       target_base_url: "https://serve-validation-pyz23.cld-kvedzwag2qa8i5bj.s.anyscaleuserdata-staging.com"
-      total_qps: 18

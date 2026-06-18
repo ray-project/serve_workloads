@@ -8,12 +8,12 @@ from ray import serve
 from starlette.requests import Request
 
 from serve_validation.common import actor_options, simulate_batch_infer_ms
-from serve_validation.config import _with_max, AUTOSCALE_SPIKY
+from serve_validation.config import _with_max, AUTOSCALE_SPIKY_T2
 
 
 @serve.deployment(
     name="batch-infer",
-    autoscaling_config=_with_max(AUTOSCALE_SPIKY, 256),
+    autoscaling_config=_with_max(AUTOSCALE_SPIKY_T2, 256),
     # Must be >= max_batch_size * max_concurrent_batches (32) or batching never fills.
     ray_actor_options=actor_options(num_cpus=0.5, simulated_gpu=True),
     health_check_period_s=10,

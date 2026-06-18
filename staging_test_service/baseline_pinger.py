@@ -8,13 +8,13 @@ The periodic locust load tests run *on top* of this baseline. HTTP-only for v1
 from __future__ import annotations
 
 import asyncio
+import dataclasses
 import logging
 import os
-import random
-from typing import Dict, Optional, Set
+from typing import Optional
 
 import aiohttp
-from aiohttp.client_exceptions import ClientOSError
+from aiohttp.client_exceptions import ClientConnectionError, ClientOSError
 from aiohttp_retry import RetryClient, ExponentialRetry
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -23,43 +23,59 @@ from ray import serve
 from ray.util.metrics import Counter, Gauge
 from ray._common.utils import run_background_task
 
-from traffic_model import build_request, choose_endpoint
+from traffic_model import ENDPOINTS, build_request
 
 logger = logging.getLogger("ray.serve")
 api = FastAPI()
 
-# Endpoints whose timeout exceeds this are gated separately from the fast
-# majority, so a stuck slow request can never block baseline traffic.
-SLOW_TIER_TIMEOUT_THRESHOLD_S = 15.0
-SLOW_TIER_MAX_IN_FLIGHT = 10
+# Closed-loop, per-deployment concurrency: hold exactly N requests in flight to
+# each deployment and refill the instant one returns (N "slots" per endpoint).
+# Anything not in POOL_TARGETS uses DEFAULT_CONCURRENCY; 0 disables an endpoint.
+# The send rate is emergent (~N / latency), not a fixed QPS.
+DEFAULT_CONCURRENCY = 1
+POOL_TARGETS = {}  # all deployments use DEFAULT_CONCURRENCY (uniform 1 in flight)
+# heavy returns whatever size the request asks for; the always-on pool requests a
+# 1 MB liveness canary and leaves the 5-50 MB stress path to the locust suite.
+HEAVY_POOL_MB = 1.0
+# Per-endpoint minimum seconds between request starts (0 == closed-loop, no cap).
+# heavy returns 1 MB and the internal network is fast (~5 ms round trip), so an
+# uncapped closed-loop self-generates ~250 MB/s; the proxy and locust stay clean
+# (server is fine), but that churn occasionally truncates a response on the pinger
+# side. Pacing heavy to ~2 req/s keeps it a gentle 1 MB canary instead of a hammer.
+MIN_INTERVAL_S = {"heavy": 0.5}
+# pool_inflight is a LIVE gauge — re-emit the actual per-endpoint in-flight count
+# this often so the series stays fresh in Prometheus (a set-once gauge silently
+# drops out of Grafana's metric browser) and reflects stalls, not just the target N.
+POOL_INFLIGHT_EMIT_S = 2.0
 
 
 class BaselinePingerArgs(BaseModel):
     target_base_url: str
     bearer_token: str = ""
-    total_qps: float = 18.0
 
 
 @serve.deployment(
     num_replicas=1,
-    user_config={"total_qps": 18.0},      # reconfigure() starts/retunes the loop
-    ray_actor_options={"num_cpus": 0},
+    user_config={"default_concurrency": DEFAULT_CONCURRENCY, "pool_targets": POOL_TARGETS},
+    # The send loop is a single asyncio task (one core); give it dedicated cores
+    # so co-located processes can't starve the loop and inflate latency.
+    ray_actor_options={"num_cpus": 2},
 )
 class BaselinePinger:
     def __init__(self, target_base_url: str, bearer_token: str):
         self.target_base_url = target_base_url
         self.bearer_token = bearer_token
-        self.total_qps = 18.0
-        self._rng = random.Random()
+        self.default_concurrency = DEFAULT_CONCURRENCY
+        self.pool_targets = dict(POOL_TARGETS)
         self._loop_task: Optional[asyncio.Task] = None
-        self._pending: Dict[str, Set[asyncio.Future]] = {"fast": set(), "slow": set()}
-        self._last_skip_log: Dict[str, float] = {}
+        self._inflight = {}   # live per-endpoint in-flight count; emitted by _emit_inflight
         self._init_metrics()
 
     async def reconfigure(self, config: dict):
         # Called by Serve after __init__ (in the event loop) and on every config
-        # update — both starts the loop and supports live QPS tuning.
-        self.total_qps = max(0.1, float(config.get("total_qps", 18.0)))
+        # update — both starts the pools and supports live concurrency tuning.
+        self.default_concurrency = max(0, int(config.get("default_concurrency", DEFAULT_CONCURRENCY)))
+        self.pool_targets = dict(config.get("pool_targets", POOL_TARGETS))
         await self.stop()
         self.start()
 
@@ -74,61 +90,92 @@ class BaselinePinger:
         self.bad = Counter(
             "baseline_pinger_requests_failed", "Non-2xx or errored requests.", tag_keys=tk
         ).set_default_tags({"source": "baseline"})
+        # Server-side failures only (5xx / timeout / connection); client-side
+        # 4xx and unexpected client errors are excluded. This is the alert source.
+        self.server_err = Counter(
+            "baseline_pinger_server_errors",
+            "Server-side failures calling serve-validation (reason=http_5xx|timeout|connection).",
+            tag_keys=("endpoint", "source", "reason"),
+        ).set_default_tags({"source": "baseline"})
         self.lat = Gauge(
             "baseline_pinger_request_latency_s", "Latency of the last request.", tag_keys=tk
         ).set_default_tags({"source": "baseline"})
-        self.pend = Gauge(
-            "baseline_pinger_pending_requests", "In-flight requests per tier.",
-            tag_keys=("source", "tier"),
-        ).set_default_tags({"source": "baseline"})
-        self.skipped = Counter(
-            "baseline_pinger_sends_skipped",
-            "Sends skipped because the tier's in-flight cap was reached.",
-            tag_keys=("source", "tier"),
+        self.pool_inflight = Gauge(
+            "baseline_pinger_pool_inflight",
+            "Target in-flight requests held per deployment (closed-loop pool size).",
+            tag_keys=tk,
         ).set_default_tags({"source": "baseline"})
 
-    async def _run_loop(self):
-        send_interval_s = 1.0 / self.total_qps
-        caps = {"fast": 2.5 * self.total_qps, "slow": SLOW_TIER_MAX_IN_FLIGHT}
+    def _pool_spec(self):
+        """(Endpoint, concurrency) per deployment; concurrency 0 disables it.
+        heavy is re-pointed at a tiny body so the always-on pool is a liveness
+        canary, not a 50 MB bandwidth test (the locust suite covers that)."""
+        spec = []
+        for ep in ENDPOINTS:
+            n = int(self.pool_targets.get(ep.name, self.default_concurrency))
+            if n <= 0:
+                continue
+            if ep.name == "heavy":
+                ep = dataclasses.replace(ep, json_factory=lambda: {"mb": HEAVY_POOL_MB})
+            spec.append((ep, n))
+        return spec
+
+    async def _run_pools(self):
         # Retry only instant connection-level errors (stale keep-alive sockets
-        # killed by the LB). Never retry timeouts or 5xx: for a constant-rate
-        # generator the next scheduled send IS the retry, and a slot held
-        # across 130s timeout attempts starves the send budget for minutes.
+        # killed by the LB). Never retry timeouts or 5xx: the slot refills on
+        # completion, so the next request IS the retry; holding a slot across
+        # timeout attempts would starve that deployment's concurrency.
         retry = ExponentialRetry(
             attempts=3, start_timeout=0.25, factor=2,
             exceptions=[aiohttp.ServerDisconnectedError, ClientOSError],
             retry_all_server_errors=False,
         )
-        loop = asyncio.get_event_loop()
+        spec = self._pool_spec()
         async with RetryClient(retry_options=retry) as client:
-            next_send = loop.time()
-            while True:
-                ep = choose_endpoint(self._rng)
-                tier = "slow" if ep.timeout_s > SLOW_TIER_TIMEOUT_THRESHOLD_S else "fast"
-                pending = self._pending[tier]
-                if len(pending) < caps[tier]:
-                    pending.add(asyncio.ensure_future(self._send(client, ep)))
-                else:
-                    self.skipped.inc(tags={"tier": tier})
-                    now = loop.time()
-                    if now - self._last_skip_log.get(tier, 0.0) > 5.0:
-                        self._last_skip_log[tier] = now
-                        logger.warning(
-                            f"baseline pinger {tier} tier at capacity "
-                            f"({len(pending)} in flight); skipping sends."
-                        )
-                for t, futs in self._pending.items():
-                    self._pending[t] = {f for f in futs if not f.done()}
-                    self.pend.set(len(self._pending[t]), tags={"tier": t})
-                # Absolute-deadline pacing: relative sleeps accumulate timer
-                # overshoot (~2ms/tick == only ~17.4 of 18 QPS). On a stall
-                # of the loop itself, resync instead of bursting to catch up.
-                next_send += send_interval_s
-                now = loop.time()
-                if next_send < now - 1.0:
-                    next_send = now
-                if next_send > now:
-                    await asyncio.sleep(next_send - now)
+            # _emit_inflight reports the live gauge; one _worker per slot.
+            tasks = [asyncio.ensure_future(self._emit_inflight())]
+            for ep, n in spec:
+                self._inflight.setdefault(ep.name, 0)
+                for _ in range(n):
+                    tasks.append(asyncio.ensure_future(self._worker(client, ep)))
+            logger.info(
+                "BaselinePinger pools started: %s -> %s",
+                {ep.name: n for ep, n in spec}, self.target_base_url,
+            )
+            await asyncio.gather(*tasks)
+
+    async def _emit_inflight(self):
+        # pool_inflight is a LIVE gauge: emit the actual per-endpoint in-flight
+        # count on a heartbeat so the series stays fresh (a set-once gauge drops
+        # out of the metric browser) and reflects reality (~N when healthy, lower
+        # if a slot stalls). _worker maintains self._inflight via cheap dict ++/--.
+        while True:
+            for name, count in list(self._inflight.items()):
+                self.pool_inflight.set(count, tags={"endpoint": name})
+            await asyncio.sleep(POOL_INFLIGHT_EMIT_S)
+
+    async def _worker(self, client: RetryClient, ep):
+        # One persistent slot: keep one request to `ep` in flight and refill when
+        # it returns. N workers per endpoint == N concurrent. A per-endpoint min
+        # interval (MIN_INTERVAL_S) optionally caps the refill rate so a fast,
+        # large-body endpoint can't self-hammer (see heavy).
+        name = ep.name
+        min_interval = MIN_INTERVAL_S.get(name, 0.0)
+        loop = asyncio.get_event_loop()
+        while True:
+            start = loop.time()
+            self._inflight[name] = self._inflight.get(name, 0) + 1
+            try:
+                await self._send(client, ep)
+            except Exception:
+                # _send swallows its own request errors; this only guards an
+                # unexpected failure (e.g. build_request) from killing the slot.
+                logger.exception(f"baseline {ep.name} worker iteration failed")
+                await asyncio.sleep(0.1)
+            finally:
+                self._inflight[name] = self._inflight.get(name, 1) - 1
+            if min_interval:
+                await asyncio.sleep(max(0.0, min_interval - (loop.time() - start)))
 
     async def _send(self, client: RetryClient, ep):
         req = build_request(ep, self.target_base_url)
@@ -144,20 +191,37 @@ class BaselinePinger:
             ) as resp:
                 await resp.read()  # drain body (covers streaming + heavy payloads)
                 (self.ok if resp.status == 200 else self.bad).inc(tags=tags)
-                if resp.status != 200:
+                if resp.status >= 500:
+                    # Server-side: serve-validation itself returned a 5xx.
+                    self.server_err.inc(tags={**tags, "reason": "http_5xx"})
+                    logger.error(f"baseline {ep.name} -> server HTTP {resp.status}")
+                elif resp.status != 200:
+                    # Client-side (4xx) or other non-2xx: failed, but not alertable.
                     logger.warning(f"baseline {ep.name} -> HTTP {resp.status}")
-        except Exception:
+        # Order matters: ServerTimeoutError subclasses BOTH asyncio.TimeoutError
+        # and ClientConnectionError, so the timeout handler must stay first.
+        except asyncio.TimeoutError:
+            # Server too slow to respond within ep.timeout_s — server-side.
             self.bad.inc(tags=tags)
-            logger.exception(f"baseline {ep.name} request error")
+            self.server_err.inc(tags={**tags, "reason": "timeout"})
+            logger.warning(f"baseline {ep.name} server-side timeout")
+        except ClientConnectionError as exc:
+            # Connection dropped/refused, survived the 3 retries — server/proxy
+            # unreachable. Server-side.
+            self.bad.inc(tags=tags)
+            self.server_err.inc(tags={**tags, "reason": "connection"})
+            logger.warning(f"baseline {ep.name} server-side connection error: {exc!r}")
+        except Exception:
+            # Unexpected / client-side (e.g. a bug building the request) — count
+            # as failed, but never as a server error.
+            self.bad.inc(tags=tags)
+            logger.exception(f"baseline {ep.name} client-side request error")
         finally:
             self.lat.set(asyncio.get_event_loop().time() - t0, tags=tags)
 
     def start(self):
         if self._loop_task is None:
-            self._loop_task = run_background_task(self._run_loop())
-            logger.info(
-                f"BaselinePinger started: {self.total_qps} QPS -> {self.target_base_url}"
-            )
+            self._loop_task = run_background_task(self._run_pools())
         return "started"
 
     async def stop(self):
@@ -193,7 +257,11 @@ def build_app(args: BaselinePingerArgs):
     if isinstance(args, dict):
         args = BaselinePingerArgs(**args)
     token = args.bearer_token or os.environ.get("ANYSCALE_SERVICE_TOKEN", "")
-    qps = float(os.environ.get("BASELINE_QPS", args.total_qps))
+    # In-flight pool size is tunable from YAML via BASELINE_DEFAULT_CONCURRENCY;
+    # per-deployment overrides (if any) live in POOL_TARGETS.
+    default_concurrency = int(os.environ.get("BASELINE_DEFAULT_CONCURRENCY", DEFAULT_CONCURRENCY))
     return Router.bind(
-        BaselinePinger.options(user_config={"total_qps": qps}).bind(args.target_base_url, token)
+        BaselinePinger.options(
+            user_config={"default_concurrency": default_concurrency, "pool_targets": dict(POOL_TARGETS)}
+        ).bind(args.target_base_url, token)
     )
