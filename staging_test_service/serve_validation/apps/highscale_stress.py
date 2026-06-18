@@ -6,12 +6,12 @@ from ray import serve
 from starlette.requests import Request
 
 from serve_validation.common import actor_options, sleep_ms
-from serve_validation.config import _with_max, AUTOSCALE_SPIKY
+from serve_validation.config import _with_max, AUTOSCALE_HIGHSCALE
 
 
 @serve.deployment(
     name="highscale-stress",
-    autoscaling_config=_with_max(AUTOSCALE_SPIKY, 1536),
+    autoscaling_config=_with_max(AUTOSCALE_HIGHSCALE, 1536),
     ray_actor_options=actor_options(num_cpus=0.5),
     health_check_period_s=10,
     health_check_timeout_s=30,

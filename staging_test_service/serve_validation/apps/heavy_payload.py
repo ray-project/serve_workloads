@@ -9,12 +9,12 @@ from starlette.requests import Request
 from starlette.responses import Response
 
 from serve_validation.common import actor_options, random_heavy_mb
-from serve_validation.config import _with_max, AUTOSCALE_GROWTH
+from serve_validation.config import _with_max, AUTOSCALE_HEAVY
 
 
 @serve.deployment(
     name="heavy-payload",
-    autoscaling_config=_with_max(AUTOSCALE_GROWTH, 128),
+    autoscaling_config=_with_max(AUTOSCALE_HEAVY, 128),
     ray_actor_options=actor_options(num_cpus=2),
     health_check_period_s=10,
     health_check_timeout_s=30,

@@ -8,11 +8,11 @@ from ray import serve
 from starlette.requests import Request
 
 from serve_validation.common import actor_options, simulate_short_cpu_ms
-from serve_validation.config import _with_max, AUTOSCALE_SPIKY
+from serve_validation.config import _with_max, AUTOSCALE_SPIKY_T2
 
 router_opts = dict(
     name="cpu-fanout-router",
-    autoscaling_config=_with_max(AUTOSCALE_SPIKY, 64),
+    autoscaling_config=_with_max(AUTOSCALE_SPIKY_T2, 64),
     ray_actor_options=actor_options(num_cpus=0.5),
     health_check_period_s=10,
     health_check_timeout_s=60,
@@ -21,7 +21,7 @@ router_opts = dict(
 )
 
 worker_opts = dict(
-    autoscaling_config=_with_max(AUTOSCALE_SPIKY, 64),
+    autoscaling_config=_with_max(AUTOSCALE_SPIKY_T2, 64),
     ray_actor_options=actor_options(num_cpus=0.5),
     health_check_period_s=10,
     health_check_timeout_s=60,
@@ -31,7 +31,7 @@ worker_opts = dict(
 
 agg_opts = dict(
     name="cpu-fanout-agg",
-    autoscaling_config=_with_max(AUTOSCALE_SPIKY, 64),
+    autoscaling_config=_with_max(AUTOSCALE_SPIKY_T2, 64),
     ray_actor_options=actor_options(num_cpus=0.5),
     health_check_period_s=10,
     health_check_timeout_s=60,
