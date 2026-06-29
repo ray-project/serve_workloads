@@ -19,7 +19,12 @@ AUTOSCALE_GROWTH = AutoscalingConfig(
     min_replicas=0,
     max_replicas=1,
     target_ongoing_requests=3,
-    upscale_delay_s=15,
+    # Fast scale-from-zero so composition chains warm hop-by-hop without blowing
+    # the client timeout: react on the first metric, short averaging window, 2x
+    # upscaling gain. Pair with the metric-push env vars in the service yaml.
+    upscale_delay_s=0,
+    look_back_period_s=15,
+    upscaling_factor=2.0,
     downscale_delay_s=300,
     downscale_to_zero_delay_s=300,
 )
@@ -29,7 +34,10 @@ AUTOSCALE_DECLINE = AutoscalingConfig(
     min_replicas=0,
     max_replicas=1,
     target_ongoing_requests=3,
-    upscale_delay_s=20,
+    # Fast scale-from-zero (see AUTOSCALE_GROWTH).
+    upscale_delay_s=0,
+    look_back_period_s=15,
+    upscaling_factor=2.0,
     downscale_delay_s=300,
     downscale_to_zero_delay_s=300,
 )
@@ -49,7 +57,10 @@ AUTOSCALE_DIURNAL = AutoscalingConfig(
     min_replicas=0,
     max_replicas=1,
     target_ongoing_requests=2,
-    upscale_delay_s=10,
+    # Fast scale-from-zero (see AUTOSCALE_GROWTH).
+    upscale_delay_s=0,
+    look_back_period_s=15,
+    upscaling_factor=2.0,
     downscale_delay_s=300,
     downscale_to_zero_delay_s=300,
 )
@@ -73,7 +84,15 @@ AUTOSCALE_HIGHSCALE = AUTOSCALE_SPIKY.copy(update={"min_replicas": 2})
 # batch-infer + cpu-fanout: raise target to 2 so the N=1 baseline settles at a
 # single replica with margin (no boundary churn). Halves their under-load scale,
 # which is fine -- they are not the scale-to-1536 deployment.
-AUTOSCALE_SPIKY_T2 = AUTOSCALE_SPIKY.copy(update={"target_ongoing_requests": 2})
+AUTOSCALE_SPIKY_T2 = AUTOSCALE_SPIKY.copy(
+    update={
+        "target_ongoing_requests": 2,
+        # Fast scale-from-zero (see AUTOSCALE_GROWTH).
+        "upscale_delay_s": 0,
+        "look_back_period_s": 15,
+        "upscaling_factor": 2.0,
+    }
+)
 
 # heavy-payload: the pinger paces heavy to ~2 req/s (a 1 MB canary), so its ongoing
 # requests sit near zero and the autoscaler would scale it to zero and oscillate

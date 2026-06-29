@@ -9,7 +9,7 @@
 
 name: serve-validation
 
-image_uri: anyscale/ray:nightly-py310-cu128
+image_uri: anyscale/ray:turbonightly-py310-cu128
 
 working_dir: .
 
@@ -44,7 +44,7 @@ http_options:
   # idle/request timeout (~300s observed) that this YAML cannot override; for
   # caps above 300s, escalate to the Anyscale platform team.
   request_timeout_s: 180
-  keep_alive_timeout_s: 200
+  keep_alive_timeout_s: 3600 # (should be >= to AWS ALB idle timeout)
 
 grpc_options:
   grpc_servicer_functions:
@@ -79,6 +79,12 @@ env_vars:
   RAY_SERVE_PORT_QUARANTINE_S: "1500"
   RAY_SERVE_QUEUE_LENGTH_RESPONSE_DEADLINE_S: "0.5"
   RAY_SERVE_HAPROXY_BROADCAST_COALESCE_S: "0.5"
+
+  # Faster scale-from-zero for composition chains. These gate how quickly the
+  # controller sees queued requests for a 0-replica deployment (default 10s),
+  # which dominates per-hop cold start. Pair with upscale_delay_s=0 in config.py.
+  RAY_SERVE_HANDLE_AUTOSCALING_METRIC_PUSH_INTERVAL_S: "2"
+  RAY_SERVE_REPLICA_AUTOSCALING_METRIC_PUSH_INTERVAL_S: "2"
 
 applications:
   - name: echo-baseline
