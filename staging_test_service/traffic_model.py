@@ -107,11 +107,13 @@ ENDPOINTS: List[Endpoint] = [
     Endpoint("echo",      "GET",  "/echo/",            22.0),
     Endpoint("mux",       "POST", "/mux/",              0.75, json_factory=mux_payload, headers_factory=mux_headers),
     Endpoint("stream",    "POST", "/stream-chat/",      0.20, json_factory=stream_payload, timeout_s=30.0),
-    Endpoint("nlp",       "POST", "/nlp-chain/",        0.14, data_factory=nlp_payload),
-    Endpoint("image",     "POST", "/image-dag/",        0.09, data_factory=image_payload),
-    Endpoint("fanout",    "POST", "/cpu-fanout/",       0.09, data_factory=fanout_payload),
+    # Composition chains cold-start hop-by-hop from zero on deploy; give them
+    # headroom above that window so a cold-start is a slow success, not a timeout.
+    Endpoint("nlp",       "POST", "/nlp-chain/",        0.14, data_factory=nlp_payload, timeout_s=30.0),
+    Endpoint("image",     "POST", "/image-dag/",        0.09, data_factory=image_payload, timeout_s=45.0),  # 4 stages, deepest
+    Endpoint("fanout",    "POST", "/cpu-fanout/",       0.09, data_factory=fanout_payload, timeout_s=30.0),
     Endpoint("batch",     "POST", "/batch-infer/",      0.08, json_factory=batch_payload),
-    Endpoint("mixed",     "POST", "/mixed-preprocess/", 0.05, data_factory=mixed_payload),
+    Endpoint("mixed",     "POST", "/mixed-preprocess/", 0.05, data_factory=mixed_payload, timeout_s=30.0),  # composition chain
     Endpoint("heavy",     "POST", "/heavy-payload/",    0.015, json_factory=heavy_payload, timeout_s=60.0),
     Endpoint("long",      "POST", "/long-runner/",      0.009, json_factory=long_payload, timeout_s=150.0),
 ]
