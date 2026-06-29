@@ -9,7 +9,7 @@
 
 name: serve-validation
 
-image_uri: anyscale/ray:nightly-py310-cu128
+image_uri: anyscale/ray:turbonightly-py310-cu128
 
 working_dir: .
 
@@ -44,7 +44,7 @@ http_options:
   # idle/request timeout (~300s observed) that this YAML cannot override; for
   # caps above 300s, escalate to the Anyscale platform team.
   request_timeout_s: 180
-  keep_alive_timeout_s: 200
+  keep_alive_timeout_s: 3600 # (should be >= to AWS ALB idle timeout)
 
 grpc_options:
   grpc_servicer_functions:
