@@ -100,42 +100,37 @@ def build_slack_message(
     results_dir: Path,
     artifact_uri: Optional[str] = None,
     error: Optional[str] = None,
+    report_url: Optional[str] = None,
 ) -> str:
+    """Compact summary: a monospace key/value table (pass/fail, duration,
+    requests, failures, rps) plus a clickable detailed-report link. host,
+    exit_code, artifact_uri and results_dir are accepted for call-site
+    compatibility but intentionally not shown."""
     status = "PASSED" if ok else "FAILED"
-    if artifact_uri:
-        artifacts_line = f"- Artifacts: {artifact_uri}"
+    if stats is not None:
+        requests = f"{stats.request_count:,}"
+        failures = f"{stats.failure_count:,} ({_format_failure_rate(stats.failure_rate)})"
+        rps = _format_optional_rate(stats.requests_per_s)
     else:
-        artifacts_line = f"- Artifacts: `{results_dir}` (local, ephemeral)"
-    lines = [
-        f"*Locust load test {status}*",
-        f"Host: {host}",
-        "",
-        "*Run*",
-        f"- Duration: {duration_s:.1f}s",
-        f"- Exit code: {exit_code}",
-        artifacts_line,
+        requests = failures = rps = "n/a"
+
+    rows = [
+        ("Load test", status),
+        ("Duration", f"{duration_s:.1f}s"),
+        ("Requests", requests),
+        ("Failures", failures),
+        ("RPS", rps),
     ]
+    width = max(len(label) for label, _ in rows)
+    table = "\n".join(f"{label:<{width}}  {value}" for label, value in rows)
 
-    if stats is None:
-        lines.extend(["", "*Results*", "- No Locust stats CSV was produced."])
-    else:
-        lines.extend(
-            [
-                "",
-                "*Results*",
-                f"- Requests: {stats.request_count:,}",
-                (
-                    f"- Failures: {stats.failure_count:,} "
-                    f"({_format_failure_rate(stats.failure_rate)})"
-                ),
-                f"- RPS: {_format_optional_rate(stats.requests_per_s)}",
-                f"- Avg latency: {_format_optional_ms(stats.avg_response_ms)}",
-                "- Per-deployment percentiles: in this thread",
-            ]
-        )
-
+    lines = ["*Locust load test*", "```", table, "```"]
+    # The link must sit outside the code block; Slack does not render links
+    # inside a ``` block as clickable.
+    if report_url:
+        lines.append(f"Detailed report: <{report_url}|report_detailed.html>")
     if error:
-        lines.extend(["", f"*Error:* {error}"])
+        lines.append(f"*Error:* {error}")
 
     return "\n".join(lines)
 
@@ -254,6 +249,24 @@ def _format_ms_cell(value: Optional[float]) -> str:
     return "-" if value is None else f"{value:,.0f}"
 
 
+def _breaching_deployments(
+    deployments: list[DeploymentStats],
+) -> list[DeploymentStats]:
+    """Deployments whose latency shape breaches a warning threshold (an '!'
+    band): P90 >3x, P95 >4x, P99 >10x, or P99.9 >50x of their own P50.
+    Deployments without a usable P50 cannot be evaluated and are skipped."""
+    flagged = []
+    for dep in deployments:
+        if not dep.p50_ms or dep.p50_ms <= 0:
+            continue
+        for _label, attr, warn_threshold in RATIO_BANDS:
+            value = getattr(dep, attr)
+            if value is not None and value / dep.p50_ms > warn_threshold:
+                flagged.append(dep)
+                break
+    return flagged
+
+
 def build_criteria_reply() -> str:
     """Thread reply 1: acceptance criteria link."""
     return "\n".join(
@@ -268,16 +281,20 @@ def build_criteria_reply() -> str:
 
 
 def build_percentiles_reply(deployments: Optional[list[DeploymentStats]]) -> str:
-    """Thread reply 2: response-time percentiles per deployment."""
-    header = "*Response time percentiles by deployment* (ms)"
+    """Thread reply 2: response-time percentiles, limited to deployments that
+    breach a warning threshold (see RATIO_BANDS); healthy ones are omitted."""
+    header = "*Response time percentiles* (ms) — deployments above the warning thresholds"
     if not deployments:
         return f"{header}\nNo Locust stats were produced."
-    width = _name_width(deployments)
+    flagged = _breaching_deployments(deployments)
+    if not flagged:
+        return "*Response time percentiles by deployment*\nAll deployments are within the latency guidelines."
+    width = _name_width(flagged)
     rows = [
         f"{'Deployment':<{width}}{'Requests':>10}{'P50':>9}{'P90':>9}"
         f"{'P95':>9}{'P99':>9}{'P99.9':>9}"
     ]
-    for dep in deployments:
+    for dep in flagged:
         rows.append(
             f"{_display_name(dep):<{width}}{dep.requests:>10,}"
             f"{_format_ms_cell(dep.p50_ms):>9}{_format_ms_cell(dep.p90_ms):>9}"
@@ -285,24 +302,28 @@ def build_percentiles_reply(deployments: Optional[list[DeploymentStats]]) -> str
             f"{_format_ms_cell(dep.p999_ms):>9}"
         )
     lines = [header, "```", *rows, "```"]
-    if any(d.approx for d in deployments):
+    if any(d.approx for d in flagged):
         lines.append("_~ approximated: merged from per-name CSV rows._")
     return "\n".join(lines)
 
 
 def build_ratio_reply(deployments: Optional[list[DeploymentStats]]) -> str:
-    """Thread reply 3: per deployment, each percentile as a ratio of that
-    deployment's own P50, with warning-threshold breaches marked."""
-    header = "*Latency shape by deployment* (ratio to own P50)"
+    """Thread reply 3: latency shape (each percentile as a ratio of the
+    deployment's own P50), limited to deployments that breach a warning
+    threshold; healthy ones are omitted."""
+    header = "*Latency shape* (ratio to own P50) — deployments above the warning thresholds"
     if not deployments:
         return f"{header}\nNo Locust stats were produced."
+    flagged = _breaching_deployments(deployments)
+    if not flagged:
+        return "*Latency shape by deployment*\nAll deployments are below the warning thresholds."
 
-    width = _name_width(deployments)
+    width = _name_width(flagged)
     rows = [
         f"{'Deployment':<{width}}{'P50(ms)':>9}{'P90':>8}{'P95':>8}{'P99':>8}{'P99.9':>8}"
     ]
     breached = []
-    for dep in deployments:
+    for dep in flagged:
         cells = []
         dep_breaches = []
         for label, attr, warn_threshold in RATIO_BANDS:
@@ -323,11 +344,7 @@ def build_ratio_reply(deployments: Optional[list[DeploymentStats]]) -> str:
         if dep_breaches:
             breached.append(f":warning: `{dep.name}`: {', '.join(dep_breaches)}")
 
-    lines = [header, "```", *rows, "```", RATIO_LEGEND]
-    if breached:
-        lines.extend(breached)
-    else:
-        lines.append("All deployments are below the warning thresholds.")
+    lines = [header, "```", *rows, "```", RATIO_LEGEND, *breached]
     return "\n".join(lines)
 
 
