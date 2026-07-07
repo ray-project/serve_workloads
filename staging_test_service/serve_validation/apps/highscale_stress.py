@@ -12,7 +12,7 @@ from serve_validation.config import _with_max, AUTOSCALE_HIGHSCALE
 @serve.deployment(
     name="highscale-stress",
     autoscaling_config=_with_max(AUTOSCALE_HIGHSCALE, 1536),
-    ray_actor_options=actor_options(num_cpus=0.5),
+    ray_actor_options=actor_options(num_cpus=1),
     health_check_period_s=10,
     health_check_timeout_s=30,
     max_ongoing_requests=10000,

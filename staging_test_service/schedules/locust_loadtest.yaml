@@ -9,7 +9,7 @@ cron_expression: "30 11 * * 1,4"
 job_config:
   name: serve-validation-locust
   entrypoint: >-
-    python run_locust_test.py --host https://serve-validation-pyz23.cld-kvedzwag2qa8i5bj.s.anyscaleuserdata-staging.com --processes 16 --exit-code-on-error 0
+    python run_locust_detailed.py --host https://serve-validation-pyz23.cld-kvedzwag2qa8i5bj.s.anyscaleuserdata-staging.com --processes 60 --exit-code-on-error 0
   image_uri: anyscale/ray:nightly-py310
   env_vars:
     ANYSCALE_SERVICE_TOKEN: "${ANYSCALE_SERVICE_TOKEN}"
@@ -17,10 +17,11 @@ job_config:
     SLACK_BOT_TOKEN: "${SLACK_BOT_TOKEN}"
     SLACK_CHANNEL: "${SLACK_CHANNEL}"
     LOCUST_RUN_MINUTES: "60"
+    LOCUST_PEAK_USERS: "1000"
   working_dir: .
-  requirements: requirements.txt
+  requirements: requirements_detailed.txt
   compute_config:
     cloud: anyscale_v2_default_cloud
     head_node:
-      instance_type: m7i.16xlarge
+      instance_type: m7i.24xlarge
   max_retries: 0

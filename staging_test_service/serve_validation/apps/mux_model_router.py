@@ -16,7 +16,7 @@ from ray import serve
 from starlette.requests import Request
 
 from serve_validation.common import actor_options
-from serve_validation.config import _with_max, AUTOSCALE_STABLE
+from serve_validation.config import _with_max, AUTOSCALE_STABLE, AUTOSCALE_STABLE_MUX_WORKER
 
 
 class _FakeModel:
@@ -30,28 +30,48 @@ class _FakeModel:
 
 _ingress_opts = dict(
     name="mux-ingress",
-    autoscaling_config=_with_max(AUTOSCALE_STABLE, 64),
-    ray_actor_options=actor_options(num_cpus=0.5),
+    autoscaling_config=_with_max(AUTOSCALE_STABLE, 72),
+    ray_actor_options=actor_options(num_cpus=2),
     health_check_period_s=10,
     health_check_timeout_s=30,
-    max_ongoing_requests=1000,
+    max_ongoing_requests=200,
 )
 
 _worker_opts = dict(
     name="mux-model-worker",
-    autoscaling_config=_with_max(AUTOSCALE_STABLE, 64),
-    ray_actor_options=actor_options(num_cpus=0.5, simulated_gpu=True),
+    autoscaling_config=_with_max(AUTOSCALE_STABLE_MUX_WORKER, 72),
+    ray_actor_options=actor_options(num_cpus=2, simulated_gpu=True),
     health_check_period_s=10,
     health_check_timeout_s=30,
-    max_ongoing_requests=1000,
+    max_ongoing_requests=100,
 )
+
+
+# Per-replica multiplexed cache size. Kept at 5 (clients address 20 Zipf-weighted
+# ids), so the ~15-id tail still loads lazily and can evict a resident model.
+_MODELS_PER_REPLICA = 20
 
 
 @serve.deployment(**_worker_opts)
 class MuxModelWorker:
-    @serve.multiplexed(max_num_models_per_replica=5)
+    async def __init__(self):
+        # Block readiness until every model is loaded: Ray Serve awaits an async
+        # __init__, so this replica takes no traffic until its cache is warm.
+        # _prewarm loads all models simultaneously (asyncio.gather); we just wait
+        # for the whole set to finish before the replica starts serving.
+        await self._prewarm()
+
+    async def _prewarm(self):
+        try:
+            await asyncio.gather(
+                *(self.load_model(str(i)) for i in range(_MODELS_PER_REPLICA))
+            )
+        except Exception:
+            pass  # warm-up is best-effort; lazy load still covers a miss
+
+    @serve.multiplexed(max_num_models_per_replica=_MODELS_PER_REPLICA)
     async def load_model(self, model_id: str) -> _FakeModel:
-        await asyncio.sleep(random.uniform(0.01, 0.08))
+        await asyncio.sleep(random.uniform(0.01, 0.04))
         return _FakeModel(model_id)
 
     async def __call__(self, body: Dict[str, Any]) -> Dict[str, Any]:

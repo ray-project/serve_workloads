@@ -9,9 +9,22 @@ AUTOSCALE_STABLE = AutoscalingConfig(
     min_replicas=1,
     max_replicas=1,  # overridden per deployment
     target_ongoing_requests=5,
-    upscale_delay_s=10,
+    upscale_delay_s=0,
+    look_back_period_s=2,
     downscale_delay_s=300,
-    downscale_to_zero_delay_s=300,
+    upscaling_factor=3.0,
+    downscaling_factor=0.5,
+)
+
+AUTOSCALE_STABLE_MUX_WORKER = AutoscalingConfig(
+    min_replicas=1,
+    max_replicas=1,  # overridden per deployment
+    target_ongoing_requests=10,
+    upscale_delay_s=0,
+    look_back_period_s=2,
+    downscale_delay_s=300,
+    upscaling_factor=4.0,
+    downscaling_factor=0.5,
 )
 
 # Steady growth (nlp-chain, heavy-payload)
@@ -19,12 +32,8 @@ AUTOSCALE_GROWTH = AutoscalingConfig(
     min_replicas=0,
     max_replicas=1,
     target_ongoing_requests=3,
-    # Fast scale-from-zero so composition chains warm hop-by-hop without blowing
-    # the client timeout: react on the first metric, short averaging window, 2x
-    # upscaling gain. Pair with the metric-push env vars in the service yaml.
     upscale_delay_s=0,
-    look_back_period_s=15,
-    upscaling_factor=2.0,
+    look_back_period_s=2,
     downscale_delay_s=300,
     downscale_to_zero_delay_s=300,
 )
@@ -34,10 +43,8 @@ AUTOSCALE_DECLINE = AutoscalingConfig(
     min_replicas=0,
     max_replicas=1,
     target_ongoing_requests=3,
-    # Fast scale-from-zero (see AUTOSCALE_GROWTH).
-    upscale_delay_s=0,
-    look_back_period_s=15,
-    upscaling_factor=2.0,
+    upscale_delay_s=2,
+    look_back_period_s=4,
     downscale_delay_s=300,
     downscale_to_zero_delay_s=300,
 )
@@ -47,22 +54,24 @@ AUTOSCALE_SPIKY = AutoscalingConfig(
     min_replicas=0,
     max_replicas=1,
     target_ongoing_requests=1,
-    upscale_delay_s=5,
+    upscale_delay_s=0,
+    look_back_period_s=1,
+    upscaling_factor=3.0,
     downscale_delay_s=300,
     downscale_to_zero_delay_s=300,
 )
 
 # Diurnal (stream-chat, mixed-preprocess)
 AUTOSCALE_DIURNAL = AutoscalingConfig(
-    min_replicas=0,
+    min_replicas=1,
     max_replicas=1,
-    target_ongoing_requests=2,
+    target_ongoing_requests=3,
     # Fast scale-from-zero (see AUTOSCALE_GROWTH).
     upscale_delay_s=0,
-    look_back_period_s=15,
-    upscaling_factor=2.0,
+    look_back_period_s=2,
+    upscaling_factor=3.0,
+    downscaling_factor=0.5,
     downscale_delay_s=300,
-    downscale_to_zero_delay_s=300,
 )
 
 # long-runner: longer downscale_to_zero
@@ -70,7 +79,8 @@ AUTOSCALE_LONG_RUNNER = AutoscalingConfig(
     min_replicas=0,
     max_replicas=1,
     target_ongoing_requests=2,
-    upscale_delay_s=20,
+    upscale_delay_s=2,
+    look_back_period_s=4,
     downscale_delay_s=300,
     downscale_to_zero_delay_s=600,
 )
@@ -79,7 +89,15 @@ AUTOSCALE_LONG_RUNNER = AutoscalingConfig(
 # highscale-stress: keep target=1 (1 replica per in-flight request, so it still
 # scales to its 1536 max under load); a small min floor keeps the always-on N=1
 # baseline pinned at 2 replicas instead of oscillating at the target=1 boundary.
-AUTOSCALE_HIGHSCALE = AUTOSCALE_SPIKY.copy(update={"min_replicas": 2})
+AUTOSCALE_HIGHSCALE = AUTOSCALE_SPIKY.copy(
+    update={
+        "min_replicas": 2,
+        # Autoscaling experiment: faster upscale, gentler downscale.
+        "upscaling_factor": 3.0,
+        "downscaling_factor": 0.5,
+        "target_ongoing_requests": 4,
+    }
+)
 
 # batch-infer + cpu-fanout: raise target to 2 so the N=1 baseline settles at a
 # single replica with margin (no boundary churn). Halves their under-load scale,
@@ -89,15 +107,24 @@ AUTOSCALE_SPIKY_T2 = AUTOSCALE_SPIKY.copy(
         "target_ongoing_requests": 2,
         # Fast scale-from-zero (see AUTOSCALE_GROWTH).
         "upscale_delay_s": 0,
-        "look_back_period_s": 15,
+        "look_back_period_s": 2,
         "upscaling_factor": 2.0,
+        "downscaling_factor": 0.5,
     }
 )
 
 # heavy-payload: the pinger paces heavy to ~2 req/s (a 1 MB canary), so its ongoing
 # requests sit near zero and the autoscaler would scale it to zero and oscillate
 # 0<->1. Pin a floor of 1 to keep it warm. (locust still drives 5-50 MB at load.)
-AUTOSCALE_HEAVY = AUTOSCALE_GROWTH.copy(update={"min_replicas": 1})
+AUTOSCALE_HEAVY = AUTOSCALE_GROWTH.copy(
+    update={
+        "min_replicas": 1,
+        # Autoscaling experiment: faster upscale, gentler downscale.
+        "upscaling_factor": 3.0,
+        "downscaling_factor": 0.5,
+        "target_ongoing_requests": 2,
+    }
+)
 
 
 def _with_max(base: AutoscalingConfig, max_replicas: int) -> AutoscalingConfig:
