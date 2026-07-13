@@ -79,6 +79,7 @@ env_vars:
   RAY_SERVE_PORT_QUARANTINE_S: "1500"
   RAY_SERVE_QUEUE_LENGTH_RESPONSE_DEADLINE_S: "0.5"
   RAY_SERVE_HAPROXY_BROADCAST_COALESCE_S: "0.5"
+  ANYSCALE_FREEZE_GC_ON_STARTUP: "1"
 
   # Faster scale-from-zero for composition chains. These gate how quickly the
   # controller sees queued requests for a 0-replica deployment (default 10s),
