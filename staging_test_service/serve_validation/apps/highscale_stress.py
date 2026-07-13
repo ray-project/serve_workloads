@@ -5,7 +5,7 @@ from __future__ import annotations
 from ray import serve
 from starlette.requests import Request
 
-from serve_validation.common import actor_options, sleep_ms
+from serve_validation.common import actor_options, log_request, sleep_ms
 from serve_validation.config import _with_max, AUTOSCALE_HIGHSCALE
 
 
@@ -20,6 +20,7 @@ from serve_validation.config import _with_max, AUTOSCALE_HIGHSCALE
 )
 class HighscaleStress:
     async def __call__(self, request: Request):
+        log_request(request, "highscale-stress")
         await sleep_ms(10.0)
         return {"ok": True}
 

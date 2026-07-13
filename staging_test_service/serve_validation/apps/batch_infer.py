@@ -7,7 +7,7 @@ from typing import List
 from ray import serve
 from starlette.requests import Request
 
-from serve_validation.common import actor_options, simulate_batch_infer_ms
+from serve_validation.common import actor_options, log_request, simulate_batch_infer_ms
 from serve_validation.config import _with_max, AUTOSCALE_SPIKY_T2
 
 
@@ -28,6 +28,7 @@ class BatchInfer:
         return [{"batch_size": len(reqs), "i": i} for i in range(len(reqs))]
 
     async def __call__(self, request: Request):
+        log_request(request, "batch-infer")
         return await self.handle_batch(request)
 
 

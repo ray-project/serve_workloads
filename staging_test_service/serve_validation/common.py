@@ -4,9 +4,28 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import os
 import random
 from typing import Any, Dict, List, Optional
+
+# Kept in sync with traffic_model.REQUEST_ID_HEADER on the pinger side. Not
+# imported from traffic_model to avoid pulling that module into every
+# serve-validation app process.
+REQUEST_ID_HEADER = "X-Request-ID"
+
+_logger = logging.getLogger("ray.serve")
+
+
+def log_request(request, app_name: str) -> str:
+    """Log the incoming request's X-Request-ID and return it.
+
+    The pinger stamps a UUID into X-Request-ID for every call; echoing it here
+    lets a failed pinger log line be correlated to the exact server-side entry.
+    """
+    rid = request.headers.get(REQUEST_ID_HEADER, "")
+    _logger.info(f"{app_name} received request_id={rid} path={request.url.path}")
+    return rid
 
 # Request simulated_gpu on Ray actors only when the cluster exposes that custom resource
 # (e.g. Anyscale cpu-gpu-sim worker group). Default off so CPU-only workers schedule.

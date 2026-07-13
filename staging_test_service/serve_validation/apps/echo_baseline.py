@@ -5,7 +5,7 @@ from __future__ import annotations
 from ray import serve
 from starlette.requests import Request
 
-from serve_validation.common import actor_options, simulate_short_cpu_ms
+from serve_validation.common import actor_options, log_request, simulate_short_cpu_ms
 from serve_validation.config import _with_max, AUTOSCALE_STABLE
 
 _DEPLOY = dict(
@@ -21,6 +21,7 @@ _DEPLOY = dict(
 @serve.deployment(**_DEPLOY)
 class EchoBaseline:
     async def __call__(self, request: Request):
+        log_request(request, "echo-baseline")
         await simulate_short_cpu_ms(15, 45)
         return {"app": "echo-baseline", "path": str(request.url.path)}
 
