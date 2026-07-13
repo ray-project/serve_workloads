@@ -5,7 +5,7 @@ from __future__ import annotations
 from ray import serve
 from starlette.requests import Request
 
-from serve_validation.common import actor_options, simulate_encoder_ms, simulate_short_cpu_ms
+from serve_validation.common import actor_options, log_request, simulate_encoder_ms, simulate_short_cpu_ms
 from serve_validation.config import _with_max, AUTOSCALE_GROWTH
 
 tok_opts = dict(
@@ -57,6 +57,7 @@ class Tokenizer:
         self.postprocessor = postprocessor.options(_by_reference=True)
 
     async def __call__(self, request: Request):
+        log_request(request, "nlp-chain")
         body = await request.body()
         await simulate_short_cpu_ms(10, 40)
         tok = body + b"|tok"

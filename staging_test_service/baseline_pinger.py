@@ -179,6 +179,7 @@ class BaselinePinger:
 
     async def _send(self, client: RetryClient, ep):
         req = build_request(ep, self.target_base_url)
+        rid = req.request_id
         tags = {"endpoint": ep.name}
         self.req.inc(tags=tags)
         t0 = asyncio.get_event_loop().time()
@@ -194,28 +195,28 @@ class BaselinePinger:
                 if resp.status >= 500:
                     # Server-side: serve-validation itself returned a 5xx.
                     self.server_err.inc(tags={**tags, "reason": "http_5xx"})
-                    logger.error(f"baseline {ep.name} -> server HTTP {resp.status}")
+                    logger.error(f"baseline {ep.name} request_id={rid} -> server HTTP {resp.status}")
                 elif resp.status != 200:
                     # Client-side (4xx) or other non-2xx: failed, but not alertable.
-                    logger.warning(f"baseline {ep.name} -> HTTP {resp.status}")
+                    logger.warning(f"baseline {ep.name} request_id={rid} -> HTTP {resp.status}")
         # Order matters: ServerTimeoutError subclasses BOTH asyncio.TimeoutError
         # and ClientConnectionError, so the timeout handler must stay first.
         except asyncio.TimeoutError:
             # Server too slow to respond within ep.timeout_s — server-side.
             self.bad.inc(tags=tags)
             self.server_err.inc(tags={**tags, "reason": "timeout"})
-            logger.warning(f"baseline {ep.name} server-side timeout")
+            logger.warning(f"baseline {ep.name} request_id={rid} server-side timeout")
         except ClientConnectionError as exc:
             # Connection dropped/refused, survived the 3 retries — server/proxy
             # unreachable. Server-side.
             self.bad.inc(tags=tags)
             self.server_err.inc(tags={**tags, "reason": "connection"})
-            logger.warning(f"baseline {ep.name} server-side connection error: {exc!r}")
+            logger.warning(f"baseline {ep.name} request_id={rid} server-side connection error: {exc!r}")
         except Exception:
             # Unexpected / client-side (e.g. a bug building the request) — count
             # as failed, but never as a server error.
             self.bad.inc(tags=tags)
-            logger.exception(f"baseline {ep.name} client-side request error")
+            logger.exception(f"baseline {ep.name} request_id={rid} client-side request error")
         finally:
             self.lat.set(asyncio.get_event_loop().time() - t0, tags=tags)
 

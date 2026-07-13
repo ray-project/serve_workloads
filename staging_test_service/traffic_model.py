@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import os
 import random
+import uuid
 from dataclasses import dataclass, field
 from typing import Callable, Dict, List, Optional
 
@@ -135,13 +136,24 @@ class BuiltRequest:
     json: Optional[dict] = None
     data: Optional[bytes] = None
     headers: Dict[str, str] = field(default_factory=dict)
+    request_id: str = ""
+
+
+# Header both sides agree on; kept as a module constant so the pinger, the
+# serve-validation apps, and any future consumer (locust, log queries) all
+# reference the same string.
+REQUEST_ID_HEADER = "X-Request-ID"
 
 
 def build_request(endpoint: Endpoint, base_url: str) -> BuiltRequest:
+    request_id = uuid.uuid4().hex
+    headers = endpoint.headers_factory() if endpoint.headers_factory else {}
+    headers[REQUEST_ID_HEADER] = request_id
     return BuiltRequest(
         method=endpoint.method,
         url=base_url.rstrip("/") + endpoint.path,
         json=endpoint.json_factory() if endpoint.json_factory else None,
         data=endpoint.data_factory() if endpoint.data_factory else None,
-        headers=endpoint.headers_factory() if endpoint.headers_factory else {},
+        headers=headers,
+        request_id=request_id,
     )
