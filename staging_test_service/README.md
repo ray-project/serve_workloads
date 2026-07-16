@@ -20,7 +20,7 @@ baseline_pinger.py         # Always-on baseline traffic generator (separate Serv
 baseline_pinger_service.yaml   # Anyscale Service config — deploy the baseline pinger
 schedules/
   version_upgrade.yaml     # Anyscale Scheduled Job — weekly redeploy
-  locust_loadtest.yaml       # Anyscale Scheduled Job — Tue/Thu 60-minute load test
+  locust_loadtest.yaml       # Anyscale Scheduled Job — Mon/Thu 60-minute load test
   locust_loadtest_daily.yaml # Anyscale Scheduled Job — daily 15-minute load test
 ```
 
@@ -117,30 +117,47 @@ envsubst < baseline_pinger_service.yaml | anyscale service deploy -f -
 
 Tune the rate with the `BASELINE_QPS` env var in `baseline_pinger_service.yaml`
 (or live via the deployment's `total_qps` user_config). Metrics are exported as
-`baseline_pinger_*` tagged `source=baseline` for Grafana. The request mix is ~98%
-echo + highscale by design (it mirrors real-usage weights), so the always-on cost
-is dominated by the cheap apps.
+`baseline_pinger_*` tagged `source=baseline` for Grafana; per-deployment latency
+percentiles come from the `baseline_pinger_request_latency_seconds` histogram
+(tagged `endpoint` + `outcome`: success, http_4xx, http_5xx, http_other, timeout,
+connection, client_error) — import `baseline_pinger_dashboard.json`
+into the service's hosted Grafana (Metrics tab → View in Grafana → Dashboards →
+Import, save in the General folder) for p50/p90/p99 per endpoint. The request
+mix is ~98% echo + highscale by design (it mirrors real-usage weights), so the
+always-on cost is dominated by the cheap apps.
 
 The baseline pinger is **not** scheduled — it runs continuously; the load tests
 below spike on top of it.
 
 ## Scheduled jobs
 
-Register the scheduled jobs:
+Register the scheduled jobs. The schedule YAMLs reference secrets as `${VAR}`
+placeholders — resolve them from the environment at apply time (secrets live in
+`../.creds.local`, which is gitignored). Applying a raw YAML would set the
+literal `${...}` string as the env value and silently break Slack posts:
 
 ```bash
-anyscale schedule apply -f schedules/version_upgrade.yaml
-anyscale schedule apply -f schedules/locust_loadtest.yaml
-anyscale schedule apply -f schedules/locust_loadtest_daily.yaml
+source ../.creds.local   # ANYSCALE_HOST, ANYSCALE_CLI_TOKEN, SLACK_WEBHOOK_URL, …
+
+apply_with_secrets() {
+  python3 -c "import os,sys; open('.apply.tmp.yaml','w').write(os.path.expandvars(open(sys.argv[1]).read()))" "$1"
+  anyscale schedule apply -f .apply.tmp.yaml && rm .apply.tmp.yaml
+}
+apply_with_secrets schedules/version_upgrade.yaml
+apply_with_secrets schedules/locust_loadtest.yaml
+apply_with_secrets schedules/locust_loadtest_daily.yaml
 ```
+
+Env vars not set in your shell are left as literal `${...}` placeholders, so
+source the creds file first.
 
 Schedule cadence:
 
 | Schedule | Job name | Cadence | Duration |
 |---|---|---|---|
-| `schedules/version_upgrade.yaml` | `serve-validation-version-upgrade` | Mondays at 10:00 America/Los_Angeles | N/A |
-| `schedules/locust_loadtest.yaml` | `serve-validation-locust` | Tuesdays and Thursdays at 10:00 America/Los_Angeles | 60 min |
-| `schedules/locust_loadtest_daily.yaml` | `serve-validation-locust-daily` | Daily at 10:00 America/Los_Angeles | 15 min |
+| `schedules/version_upgrade.yaml` | `serve-validation-version-upgrade` | Tuesdays at 10:00 America/Los_Angeles | N/A |
+| `schedules/locust_loadtest.yaml` | `serve-validation-locust` | Mondays and Thursdays at 11:30 America/Los_Angeles | 60 min |
+| `schedules/locust_loadtest_daily.yaml` | `serve-validation-locust-daily` | Daily at 11:00 America/Los_Angeles | 15 min |
 
 Trigger any job manually:
 
@@ -155,7 +172,7 @@ anyscale schedule run --name serve-validation-locust-daily
 | Variable | Used by | Description |
 |---|---|---|
 | `ANYSCALE_SERVICE_CONFIG` | `upgrade_service.py` | Path to service YAML (default: `anyscale_service.yaml`) |
-| `UPGRADE_WAIT_TIMEOUT_S` | `upgrade_service.py` | Timeout for `anyscale service wait` (default: `1200`) |
+| `UPGRADE_WAIT_TIMEOUT_S` | `upgrade_service.py` | Seconds for the service to reach RUNNING **on the new primary version** after deploy (default: `1200`) |
 | `SLACK_BOT_TOKEN`, `SLACK_CHANNEL` | `run_locust_test.py` | Slack Web API credentials for the threaded Locust result post |
 | `SLACK_WEBHOOK_URL` | `upgrade_service.py`, `run_locust_test.py` | Slack incoming webhook for deploy notifications; Locust fallback when bot token unset |
 | `ANYSCALE_SERVICE_TOKEN` | `locustfile.py` | Bearer token injected into all Locust requests |
