@@ -81,6 +81,7 @@ env_vars:
   RAY_SERVE_HAPROXY_BROADCAST_COALESCE_S: "0.5"
   ANYSCALE_FREEZE_GC_ON_STARTUP: "1"
   RAY_SERVE_ENABLE_HAPROXY_OPTIMIZED_CONFIG: "1"
+  RAY_SERVE_HAPROXY_CLOSE_SPREAD_TIME_S: "180"
 
   # Faster scale-from-zero for composition chains. These gate how quickly the
   # controller sees queued requests for a 0-replica deployment (default 10s),

@@ -20,7 +20,7 @@ from fastapi import FastAPI
 from pydantic import BaseModel
 
 from ray import serve
-from ray.util.metrics import Counter, Gauge
+from ray.util.metrics import Counter, Gauge, Histogram
 from ray._common.utils import run_background_task
 
 from traffic_model import ENDPOINTS, build_request
@@ -47,6 +47,12 @@ MIN_INTERVAL_S = {"heavy": 0.5}
 # this often so the series stays fresh in Prometheus (a set-once gauge silently
 # drops out of Grafana's metric browser) and reflects stalls, not just the target N.
 POOL_INFLIGHT_EMIT_S = 2.0
+# Histogram bucket upper bounds (s) for baseline_pinger_request_latency_seconds.
+# Log-spaced 5 ms -> 150 s so ONE metric covers echo (~ms) through long-runner
+# (30-120 s). 150 == the per-attempt client timeout (traffic_model timeout_s),
+# so observations landing in +Inf are exactly the timed-out attempts.
+LATENCY_BUCKETS_S = [0.005, 0.01, 0.025, 0.05, 0.1, 0.15, 0.25, 0.5,
+                     1, 2, 3, 5, 10, 15, 30, 60, 90, 120, 150]
 
 
 class BaselinePingerArgs(BaseModel):
@@ -99,6 +105,18 @@ class BaselinePinger:
         ).set_default_tags({"source": "baseline"})
         self.lat = Gauge(
             "baseline_pinger_request_latency_s", "Latency of the last request.", tag_keys=tk
+        ).set_default_tags({"source": "baseline"})
+        # Latency distribution over ALL attempts, split by outcome class
+        # (success / http_4xx / http_5xx / http_other / timeout / connection /
+        # client_error) so dashboards get clean success percentiles (one 150s
+        # timeout would pin a sparse endpoint's p99) and failures graph by
+        # class, while sum-over-outcome matches the gauge's every-attempt
+        # semantics. The gauge stays the last-request spot value.
+        self.lat_hist = Histogram(
+            "baseline_pinger_request_latency_seconds",
+            "Request latency distribution in seconds, tagged by outcome class.",
+            boundaries=LATENCY_BUCKETS_S,
+            tag_keys=("endpoint", "source", "outcome"),
         ).set_default_tags({"source": "baseline"})
         self.pool_inflight = Gauge(
             "baseline_pinger_pool_inflight",
@@ -182,6 +200,11 @@ class BaselinePinger:
         rid = req.request_id
         tags = {"endpoint": ep.name}
         self.req.inc(tags=tags)
+        # Histogram outcome tag mirrors the ok/bad split but keeps the failure
+        # class: success (HTTP 200), http_4xx, http_5xx, http_other (unexpected
+        # 2xx/3xx), timeout, connection, or client_error (unexpected client-side
+        # exception, incl. truncated-body reads that surface after a 200).
+        outcome = "client_error"
         t0 = asyncio.get_event_loop().time()
         try:
             async with client.request(
@@ -191,6 +214,16 @@ class BaselinePinger:
                 timeout=aiohttp.ClientTimeout(total=ep.timeout_s),
             ) as resp:
                 await resp.read()  # drain body (covers streaming + heavy payloads)
+                # Classify only after the body is fully read: a payload error
+                # mid-read jumps to the except handler and stays client_error.
+                if resp.status == 200:
+                    outcome = "success"
+                elif resp.status >= 500:
+                    outcome = "http_5xx"
+                elif resp.status >= 400:
+                    outcome = "http_4xx"
+                else:
+                    outcome = "http_other"
                 (self.ok if resp.status == 200 else self.bad).inc(tags=tags)
                 if resp.status >= 500:
                     # Server-side: serve-validation itself returned a 5xx.
@@ -203,12 +236,14 @@ class BaselinePinger:
         # and ClientConnectionError, so the timeout handler must stay first.
         except asyncio.TimeoutError:
             # Server too slow to respond within ep.timeout_s — server-side.
+            outcome = "timeout"
             self.bad.inc(tags=tags)
             self.server_err.inc(tags={**tags, "reason": "timeout"})
             logger.warning(f"baseline {ep.name} request_id={rid} server-side timeout")
         except ClientConnectionError as exc:
             # Connection dropped/refused, survived the 3 retries — server/proxy
             # unreachable. Server-side.
+            outcome = "connection"
             self.bad.inc(tags=tags)
             self.server_err.inc(tags={**tags, "reason": "connection"})
             logger.warning(f"baseline {ep.name} request_id={rid} server-side connection error: {exc!r}")
@@ -218,7 +253,11 @@ class BaselinePinger:
             self.bad.inc(tags=tags)
             logger.exception(f"baseline {ep.name} request_id={rid} client-side request error")
         finally:
-            self.lat.set(asyncio.get_event_loop().time() - t0, tags=tags)
+            # Both metrics record the same measurement (t0 -> now, spanning any
+            # RetryClient connection retries) for every attempt, success or not.
+            elapsed = asyncio.get_event_loop().time() - t0
+            self.lat.set(elapsed, tags=tags)
+            self.lat_hist.observe(elapsed, tags={**tags, "outcome": outcome})
 
     def start(self):
         if self._loop_task is None:
