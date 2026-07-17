@@ -9,6 +9,8 @@
 
 name: serve-validation
 
+project: serve-testing
+
 image_uri: anyscale/ray:turbonightly-py310-cu128
 
 working_dir: .

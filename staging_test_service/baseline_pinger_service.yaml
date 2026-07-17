@@ -11,6 +11,8 @@
 # (default 1 in flight per deployment).
 name: serve-validation-baseline-pinger
 
+project: serve-testing
+
 image_uri: anyscale/ray:nightly-py310
 
 working_dir: .
@@ -34,4 +36,4 @@ applications:
     route_prefix: /
     import_path: baseline_pinger:build_app
     args:
-      target_base_url: "https://serve-validation-pyz23.cld-kvedzwag2qa8i5bj.s.anyscaleuserdata-staging.com"
+      target_base_url: "https://serve-validation-bd88h.cld-kvedzwag2qa8i5bj.s.anyscaleuserdata-staging.com"
