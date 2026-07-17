@@ -8,8 +8,9 @@ timezone: America/Los_Angeles
 cron_expression: "30 11 * * 1,4"
 job_config:
   name: serve-validation-locust
+  project: serve-testing
   entrypoint: >-
-    python run_locust_detailed.py --host https://serve-validation-pyz23.cld-kvedzwag2qa8i5bj.s.anyscaleuserdata-staging.com --processes 60 --exit-code-on-error 0
+    python run_locust_detailed.py --host https://serve-validation-bd88h.cld-kvedzwag2qa8i5bj.s.anyscaleuserdata-staging.com --processes 60 --exit-code-on-error 0
   image_uri: anyscale/ray:nightly-py310
   env_vars:
     ANYSCALE_SERVICE_TOKEN: "${ANYSCALE_SERVICE_TOKEN}"

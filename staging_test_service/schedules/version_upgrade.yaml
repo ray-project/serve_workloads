@@ -3,6 +3,7 @@ timezone: America/Los_Angeles
 cron_expression: "0 10 * * 2"
 job_config:
   name: serve-validation-version-upgrade
+  project: serve-testing
   entrypoint: python upgrade_service.py --config-file anyscale_service.yaml --name serve-validation
   image_uri: anyscale/ray:nightly-py310
   env_vars:
