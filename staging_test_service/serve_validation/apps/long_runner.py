@@ -9,7 +9,7 @@ import random
 from ray import serve
 from starlette.requests import Request
 
-from serve_validation.common import actor_options, log_request
+from serve_validation.common import actor_options
 from serve_validation.config import _with_max, AUTOSCALE_LONG_RUNNER
 
 
@@ -24,7 +24,6 @@ from serve_validation.config import _with_max, AUTOSCALE_LONG_RUNNER
 )
 class LongRunner:
     async def __call__(self, request: Request):
-        log_request(request, "long-runner")
         try:
             payload = json.loads((await request.body()).decode("utf-8"))
         except Exception:

@@ -10,7 +10,7 @@ from ray import serve
 from starlette.requests import Request
 from starlette.responses import StreamingResponse
 
-from serve_validation.common import actor_options, log_request
+from serve_validation.common import actor_options
 from serve_validation.config import _with_max, AUTOSCALE_DIURNAL
 
 
@@ -25,7 +25,6 @@ from serve_validation.config import _with_max, AUTOSCALE_DIURNAL
 )
 class StreamChat:
     async def __call__(self, request: Request):
-        log_request(request, "stream-chat")
         try:
             payload = json.loads((await request.body()).decode("utf-8"))
         except Exception:

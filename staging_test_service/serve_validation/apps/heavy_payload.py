@@ -8,7 +8,7 @@ from ray import serve
 from starlette.requests import Request
 from starlette.responses import Response
 
-from serve_validation.common import actor_options, log_request, random_heavy_mb
+from serve_validation.common import actor_options, random_heavy_mb
 from serve_validation.config import _with_max, AUTOSCALE_HEAVY
 
 
@@ -23,7 +23,6 @@ from serve_validation.config import _with_max, AUTOSCALE_HEAVY
 )
 class HeavyPayload:
     async def __call__(self, request: Request):
-        log_request(request, "heavy-payload")
         body = await request.body()
         try:
             spec = json.loads(body.decode("utf-8"))
