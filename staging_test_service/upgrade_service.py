@@ -233,6 +233,14 @@ def main() -> int:
         action="store_true",
         help="Pass --canary-percent 100 to anyscale service deploy (skip gradual canary; for testing).",
     )
+    parser.add_argument(
+        "--max-surge-percent",
+        type=int,
+        default=None,
+        metavar="PCT",
+        help="Pass --max-surge-percent to anyscale service deploy (0-100): cap on the extra "
+        "replica capacity allocated while the rollout is in flight.",
+    )
     args = parser.parse_args()
 
     webhook = os.environ.get("SLACK_WEBHOOK_URL")
@@ -262,6 +270,8 @@ def main() -> int:
     ]
     if args.fast_rollout:
         deploy_cmd.extend(["--canary-percent", "100"])
+    if args.max_surge_percent is not None:
+        deploy_cmd.extend(["--max-surge-percent", str(args.max_surge_percent)])
 
     if args.dry_run:
         print("Would run:", subprocess.list2cmdline(deploy_cmd))
