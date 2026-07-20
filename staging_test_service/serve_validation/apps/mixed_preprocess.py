@@ -5,7 +5,7 @@ from __future__ import annotations
 from ray import serve
 from starlette.requests import Request
 
-from serve_validation.common import actor_options, log_request, simulate_encoder_ms, simulate_short_cpu_ms
+from serve_validation.common import actor_options, simulate_encoder_ms, simulate_short_cpu_ms
 from serve_validation.config import _with_max, AUTOSCALE_DIURNAL
 
 
@@ -36,7 +36,6 @@ class PreprocessCPU:
         self.infer = infer
 
     async def __call__(self, request: Request):
-        log_request(request, "mixed-preprocess")
         body = await request.body() or b"data"
         await simulate_short_cpu_ms(20, 80)
         staged = body + b"|pre"

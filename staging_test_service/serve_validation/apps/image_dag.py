@@ -7,7 +7,7 @@ import random
 from ray import serve
 from starlette.requests import Request
 
-from serve_validation.common import actor_options, log_request, random_image_mb, simulate_short_cpu_ms
+from serve_validation.common import actor_options, random_image_mb, simulate_short_cpu_ms
 from serve_validation.config import _with_max, AUTOSCALE_DECLINE
 
 
@@ -53,7 +53,6 @@ class Ingest:
         self.annotate = annotate.options(_by_reference=True)
 
     async def __call__(self, request: Request):
-        log_request(request, "image-dag")
         body = await request.body()
         if not body:
             mb = random_image_mb()

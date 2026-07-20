@@ -7,7 +7,7 @@ import asyncio
 from ray import serve
 from starlette.requests import Request
 
-from serve_validation.common import actor_options, log_request, simulate_short_cpu_ms
+from serve_validation.common import actor_options, simulate_short_cpu_ms
 from serve_validation.config import _with_max, AUTOSCALE_SPIKY_T2
 
 router_opts = dict(
@@ -86,7 +86,6 @@ class Router:
         self.agg = agg
 
     async def __call__(self, request: Request):
-        log_request(request, "cpu-fanout")
         body = await request.body() or b"ping"
         results = await asyncio.gather(
             self.w0.remote(body),

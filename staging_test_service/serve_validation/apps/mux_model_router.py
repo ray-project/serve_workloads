@@ -15,7 +15,7 @@ from typing import Any, Dict
 from ray import serve
 from starlette.requests import Request
 
-from serve_validation.common import actor_options, log_request
+from serve_validation.common import actor_options
 from serve_validation.config import _with_max, AUTOSCALE_STABLE, AUTOSCALE_STABLE_MUX_WORKER
 
 
@@ -86,7 +86,6 @@ class MuxIngress:
         self._worker = worker
 
     async def __call__(self, request: Request):
-        log_request(request, "mux-ingress")
         model_id = request.headers.get("serve_multiplexed_model_id", "0")
         raw = await request.body()
         try:
