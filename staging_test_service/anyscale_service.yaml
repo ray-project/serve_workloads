@@ -75,21 +75,27 @@ env_vars:
   # RAY_SERVE_HAPROXY_RELOAD_TIMEOUT_S: "60"
   RAY_SERVE_HAPROXY_RETRIES: "1000" # check this later ----
 
-  RAY_SERVE_HAPROXY_HARD_STOP_AFTER_S: "1200"
+  RAY_SERVE_HAPROXY_HARD_STOP_AFTER_S: "400"
   RAY_SERVE_HAPROXY_TIMEOUT_SERVER_S: "240"
   RAY_SERVE_HAPROXY_TIMEOUT_CONNECT_S: "5"
-  RAY_SERVE_PORT_QUARANTINE_S: "1500"
+  RAY_SERVE_PORT_QUARANTINE_S: "600"
   RAY_SERVE_QUEUE_LENGTH_RESPONSE_DEADLINE_S: "0.5"
   RAY_SERVE_HAPROXY_BROADCAST_COALESCE_S: "0.5"
   ANYSCALE_FREEZE_GC_ON_STARTUP: "1"
   RAY_SERVE_ENABLE_HAPROXY_OPTIMIZED_CONFIG: "1"
-  RAY_SERVE_HAPROXY_CLOSE_SPREAD_TIME_S: "180"
 
   # Faster scale-from-zero for composition chains. These gate how quickly the
   # controller sees queued requests for a 0-replica deployment (default 10s),
   # which dominates per-hop cold start. Pair with upscale_delay_s=0 in config.py.
   RAY_SERVE_HANDLE_AUTOSCALING_METRIC_PUSH_INTERVAL_S: "2"
   RAY_SERVE_REPLICA_AUTOSCALING_METRIC_PUSH_INTERVAL_S: "2"
+
+  # Default buckets + 180000: the scale-up convergence SLO was raised to 180s
+  # (2026-07-20) and the "Replica startups slower than 180s SLO" Grafana alert
+  # needs an exact 180000ms bucket boundary to count violations without
+  # interpolation (default buckets jump 120000 -> 240000). The alert query
+  # falls back to the 120000 bucket until this rollout lands.
+  RAY_SERVE_REPLICA_STARTUP_SHUTDOWN_LATENCY_BUCKETS_MS: "5,20,50,100,250,500,1000,2000,5000,10000,20000,30000,60000,120000,180000,240000"
 
 applications:
   - name: echo-baseline
