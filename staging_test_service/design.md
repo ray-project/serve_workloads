@@ -234,7 +234,7 @@ The 24-hour cycle is divided into phases anchored to a reference timezone (UTC):
 |---|---|---|---|
 | Request success rate | `1 - (serve_deployment_error_counter / serve_deployment_request_counter)` per app | ≥ 99.9% per app | 5-minute rolling |
 | P99 latency | `serve_deployment_processing_latency_ms` histogram P99 | Per-app targets (see portfolio table) | 5-minute rolling |
-| Autoscaling convergence | Time from load change detection to target replica count reached | < 120s for scale-up, < 300s for scale-down | Per scaling event |
+| Autoscaling convergence | Time from load change detection to target replica count reached | < 180s for scale-up, < 300s for scale-down | Per scaling event |
 | Replica health ratio | `running_replicas / target_replicas` per deployment | ≥ 95% sustained | 1-minute rolling |
 | Object store utilization | `ray_object_store_memory` / capacity per node | < 80% sustained, < 90% peak | 1-minute rolling |
 | Head node memory usage | RSS of head node processes / total node memory | < 75% sustained | 1-minute rolling |

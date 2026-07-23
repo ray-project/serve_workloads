@@ -8,7 +8,7 @@ from ray.serve.config import AutoscalingConfig
 AUTOSCALE_STABLE = AutoscalingConfig(
     min_replicas=1,
     max_replicas=1,  # overridden per deployment
-    target_ongoing_requests=5,
+    target_ongoing_requests=3,
     upscale_delay_s=0,
     look_back_period_s=2,
     downscale_delay_s=300,
@@ -93,9 +93,9 @@ AUTOSCALE_HIGHSCALE = AUTOSCALE_SPIKY.copy(
     update={
         "min_replicas": 2,
         # Autoscaling experiment: faster upscale, gentler downscale.
-        "upscaling_factor": 3.0,
+        "upscaling_factor": 4.0,
         "downscaling_factor": 0.5,
-        "target_ongoing_requests": 4,
+        "target_ongoing_requests": 2,
     }
 )
 
