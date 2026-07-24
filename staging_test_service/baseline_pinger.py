@@ -14,7 +14,12 @@ import os
 from typing import Optional
 
 import aiohttp
-from aiohttp.client_exceptions import ClientConnectionError, ClientOSError
+from aiohttp.client_exceptions import ClientConnectionError, ClientOSError, ClientPayloadError
+
+try:  # stable location since aiohttp 3.x; guarded against future moves
+    from aiohttp.http_exceptions import ContentLengthError
+except ImportError:  # pragma: no cover
+    ContentLengthError = None
 from aiohttp_retry import RetryClient, ExponentialRetry
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -53,6 +58,36 @@ POOL_INFLIGHT_EMIT_S = 2.0
 # so observations landing in +Inf are exactly the timed-out attempts.
 LATENCY_BUCKETS_S = [0.005, 0.01, 0.025, 0.05, 0.1, 0.15, 0.25, 0.5,
                      1, 2, 3, 5, 10, 15, 30, 60, 90, 120, 150]
+
+# The discriminating message, verbatim from every observed traceback of the
+# known uvloop bare-FIN truncation (uvloop#471 / uvloop PR#661).
+_TRUNCATION_MARKER = "Not enough data to satisfy content length header"
+
+
+def _is_uvloop_truncation(exc: BaseException, status: Optional[int]) -> bool:
+    """True ONLY for the known uvloop bare-FIN signature: a ClientPayloadError
+    raised while reading the body of an HTTP 200, caused by ContentLengthError
+    (fewer bytes than Content-Length promised). Verified via ALB access logs
+    that the full body leaves the load balancer; uvloop's TLS layer drops the
+    tail on a close_notify-less FIN (uvloop#471, fix pending in PR#661).
+
+    All three conditions must hold:
+      1. headers were received and status == 200
+      2. the exception is ClientPayloadError (body-read failure)
+      3. ContentLengthError is in its cause chain (string fallback for aiohttp
+         versions that only embed the repr in the message)
+    Truncated non-200s and any other payload error do NOT match and stay
+    counted as failures, so a real server-side truncation still alerts.
+    """
+    if status != 200 or not isinstance(exc, ClientPayloadError):
+        return False
+    node, seen = exc, set()
+    while node is not None and id(node) not in seen:
+        seen.add(id(node))
+        if ContentLengthError is not None and isinstance(node, ContentLengthError):
+            return True
+        node = node.__cause__ or node.__context__
+    return _TRUNCATION_MARKER in str(exc)
 
 
 class BaselinePingerArgs(BaseModel):
@@ -102,6 +137,14 @@ class BaselinePinger:
             "baseline_pinger_server_errors",
             "Server-side failures calling serve-validation (reason=http_5xx|timeout|connection).",
             tag_keys=("endpoint", "source", "reason"),
+        ).set_default_tags({"source": "baseline"})
+        # Known uvloop bare-FIN truncations of a 200 (uvloop#471). Excluded
+        # from ok/bad so the success ratio ignores them; tracked here so the
+        # bug stays visible and this counter -> 0 verifies the uvloop fix.
+        self.truncated = Counter(
+            "baseline_pinger_truncated_responses",
+            "200s whose body read hit the known uvloop bare-FIN truncation (not counted as failures).",
+            tag_keys=tk,
         ).set_default_tags({"source": "baseline"})
         self.lat = Gauge(
             "baseline_pinger_request_latency_s", "Latency of the last request.", tag_keys=tk
@@ -202,9 +245,11 @@ class BaselinePinger:
         self.req.inc(tags=tags)
         # Histogram outcome tag mirrors the ok/bad split but keeps the failure
         # class: success (HTTP 200), http_4xx, http_5xx, http_other (unexpected
-        # 2xx/3xx), timeout, connection, or client_error (unexpected client-side
-        # exception, incl. truncated-body reads that surface after a 200).
+        # 2xx/3xx), timeout, connection, truncated_body (known uvloop bare-FIN
+        # truncation of a 200 — tracked separately, NOT a failure), or
+        # client_error (any other unexpected client-side exception).
         outcome = "client_error"
+        status_seen: Optional[int] = None
         t0 = asyncio.get_event_loop().time()
         try:
             async with client.request(
@@ -213,6 +258,9 @@ class BaselinePinger:
                 headers={**req.headers, "Authorization": f"Bearer {self.bearer_token}"},
                 timeout=aiohttp.ClientTimeout(total=ep.timeout_s),
             ) as resp:
+                # Captured BEFORE the body read: the truncation exception
+                # escapes the `async with`, taking `resp` out of scope.
+                status_seen = resp.status
                 await resp.read()  # drain body (covers streaming + heavy payloads)
                 # Classify only after the body is fully read: a payload error
                 # mid-read jumps to the except handler and stays client_error.
@@ -247,6 +295,21 @@ class BaselinePinger:
             self.bad.inc(tags=tags)
             self.server_err.inc(tags={**tags, "reason": "connection"})
             logger.warning(f"baseline {ep.name} request_id={rid} server-side connection error: {exc!r}")
+        except ClientPayloadError as exc:
+            # Must precede the generic handler. Exempt ONLY the known uvloop
+            # bare-FIN truncation of a 200 (server + ALB provably delivered the
+            # full body; uvloop dropped the tail client-side). Any other payload
+            # error is still a real failure.
+            if _is_uvloop_truncation(exc, status_seen):
+                outcome = "truncated_body"
+                self.truncated.inc(tags=tags)
+                logger.warning(
+                    f"baseline {ep.name} request_id={rid} truncated 200 "
+                    "(known uvloop bare-FIN, uvloop#471); excluded from failures"
+                )
+            else:
+                self.bad.inc(tags=tags)
+                logger.exception(f"baseline {ep.name} request_id={rid} client-side request error")
         except Exception:
             # Unexpected / client-side (e.g. a bug building the request) — count
             # as failed, but never as a server error.
