@@ -97,6 +97,8 @@ env_vars:
   # falls back to the 120000 bucket until this rollout lands.
   RAY_SERVE_REPLICA_STARTUP_SHUTDOWN_LATENCY_BUCKETS_MS: "5,20,50,100,250,500,1000,2000,5000,10000,20000,30000,60000,120000,180000,240000"
 
+  RAY_SERVE_USE_COMPACT_SCHEDULING_STRATEGY: "0"
+
 applications:
   - name: echo-baseline
     route_prefix: /echo
