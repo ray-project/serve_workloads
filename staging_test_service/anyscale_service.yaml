@@ -97,6 +97,21 @@ env_vars:
   # falls back to the 120000 bucket until this rollout lands.
   RAY_SERVE_REPLICA_STARTUP_SHUTDOWN_LATENCY_BUCKETS_MS: "5,20,50,100,250,500,1000,2000,5000,10000,20000,30000,60000,120000,180000,240000"
 
+  # Default buckets + 15000, 30000, 130000, 150000: feeds
+  # serve_deployment_processing_latency_ms (replica.py), which the
+  # "Per-app P99 latency over design target" Grafana alert quantiles. The
+  # default buckets jump 120000 -> 300000, so long-runner's 130s SLO was
+  # unmeasurable: any single ~120.0s request (the pinger's own max draw,
+  # P = 0.05/90 per request) interpolated P99 to ~282s and fired a false
+  # "2.17x over target" alert ~0.7x/day (RCA 2026-08-03). With a 130000
+  # bound, 120.x s requests interpolate inside (120s,130s] -> ratio <= 1.0
+  # (silent); only genuine >130s P99 fires. 150000 (= pinger client timeout)
+  # keeps the fired value honest instead of interpolating into the 130->300
+  # gap. 15000/30000 make stream-chat's designed 2-30s streams measurable
+  # (rule annotation's documented 10s->60s blind spot; its divisor can drop
+  # from the 60001 hack to 30001 once this lands).
+  RAY_SERVE_REQUEST_LATENCY_BUCKETS_MS: "1,2,5,10,20,50,100,200,300,400,500,1000,2000,5000,10000,15000,30000,60000,120000,130000,150000,300000,600000"
+
   RAY_SERVE_USE_COMPACT_SCHEDULING_STRATEGY: "0"
 
 applications:
