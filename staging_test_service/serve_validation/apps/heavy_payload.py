@@ -15,7 +15,9 @@ from serve_validation.config import _with_max, AUTOSCALE_HEAVY
 @serve.deployment(
     name="heavy-payload",
     autoscaling_config=_with_max(AUTOSCALE_HEAVY, 128),
-    ray_actor_options=actor_options(num_cpus=2),
+    # 0.5 CPU per design §2; num_cpus is a scheduling reservation, not a limit
+    # (measured replica CPU at peak ≪ 0.5 core — see cost-optimization report 2026-08-03).
+    ray_actor_options=actor_options(num_cpus=0.5),
     health_check_period_s=10,
     health_check_timeout_s=30,
     max_ongoing_requests=5,

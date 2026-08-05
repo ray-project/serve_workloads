@@ -20,7 +20,11 @@ requirements: requirements.txt
 compute_config:
   cloud: anyscale_v2_default_cloud
   head_node:
-    instance_type: m7i.2xlarge
+    # m7i.xlarge (4 vCPU / 16 GiB) per design §10.3 cost lever: measured head peak
+    # (2026-08-02 run, 78 nodes) was 32% CPU / 3.2 GiB RSS on m7i.2xlarge. The
+    # 75%/90% head-memory alerts guard this. Revert to m7i.2xlarge before genuine
+    # 200-node / 4,096-replica full-scale runs.
+    instance_type: m7i.xlarge
     # No schedulable CPU on head — Serve replicas and tasks go to workers only (design.md §3.1).
     resources:
       CPU: 0
@@ -29,12 +33,14 @@ compute_config:
       instance_type: m5.4xlarge
       min_nodes: 0
       max_nodes: 150
-      market_type: ON_DEMAND
+      # Spot-first with on-demand fallback (design §3.1/§11 priced workers as spot;
+      # Risk 7: interruptions exercise node-loss recovery and are acceptable).
+      market_type: PREFER_SPOT
     - name: cpu-gpu-sim
       instance_type: m5.4xlarge
       min_nodes: 0
       max_nodes: 49
-      market_type: ON_DEMAND
+      market_type: PREFER_SPOT  # see cpu-general note
       # Expose simulated_gpu on this group (logical resources on the node).
       resources:
         simulated_gpu: 8

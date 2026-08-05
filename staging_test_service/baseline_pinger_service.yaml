@@ -24,8 +24,12 @@ compute_config:
   head_node:
     # BaselinePinger runs num_cpus:2 (set in code): the single send loop holds
     # ~11 in-flight (1 per deployment) + body reads and needs dedicated cores.
-    # Bump the instance further if the loop saturates at larger pool sizes.
-    instance_type: m7i.2xlarge
+    # m7i.large = 2 vCPU / 8 GiB, exactly matching the num_cpus:2 request;
+    # measured usage on the old m7i.2xlarge was ~0.35 core / 2.2 GiB (2026-08-03).
+    # Bump the instance if the loop saturates at larger pool sizes. Keep
+    # on-demand: this is the traffic source; a spot reclaim would fake a
+    # zero-traffic gap on the service under test.
+    instance_type: m7i.large
 
 env_vars:
   ANYSCALE_SERVICE_TOKEN: "${ANYSCALE_SERVICE_TOKEN}"
