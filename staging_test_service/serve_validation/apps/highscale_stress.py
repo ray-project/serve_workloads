@@ -12,7 +12,9 @@ from serve_validation.config import _with_max, AUTOSCALE_HIGHSCALE
 @serve.deployment(
     name="highscale-stress",
     autoscaling_config=_with_max(AUTOSCALE_HIGHSCALE, 1536),
-    ray_actor_options=actor_options(num_cpus=2),
+    # 0.5 CPU per design §2. At 2.0, the 1,536-replica peak needs 3,072 CPUs —
+    # over the 150-node cpu-general cap (2,400) — so max scale was unreachable.
+    ray_actor_options=actor_options(num_cpus=0.5),
     health_check_period_s=10,
     health_check_timeout_s=30,
     max_ongoing_requests=10000,

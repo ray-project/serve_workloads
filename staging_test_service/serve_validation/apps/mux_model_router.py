@@ -31,7 +31,7 @@ class _FakeModel:
 _ingress_opts = dict(
     name="mux-ingress",
     autoscaling_config=_with_max(AUTOSCALE_STABLE, 72),
-    ray_actor_options=actor_options(num_cpus=2),
+    ray_actor_options=actor_options(num_cpus=0.5),  # 0.5 per design §2
     health_check_period_s=10,
     health_check_timeout_s=30,
     max_ongoing_requests=200,
@@ -40,7 +40,7 @@ _ingress_opts = dict(
 _worker_opts = dict(
     name="mux-model-worker",
     autoscaling_config=_with_max(AUTOSCALE_STABLE_MUX_WORKER, 72),
-    ray_actor_options=actor_options(num_cpus=2, simulated_gpu=True),
+    ray_actor_options=actor_options(num_cpus=0.5, simulated_gpu=True),  # 0.5 per design §2
     health_check_period_s=10,
     health_check_timeout_s=30,
     max_ongoing_requests=100,

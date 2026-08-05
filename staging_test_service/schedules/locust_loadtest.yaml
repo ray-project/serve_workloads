@@ -10,7 +10,7 @@ job_config:
   name: serve-validation-locust
   project: serve-testing
   entrypoint: >-
-    python run_locust_detailed.py --host https://serve-validation-bd88h.cld-kvedzwag2qa8i5bj.s.anyscaleuserdata-staging.com --processes 60 --exit-code-on-error 0
+    python run_locust_detailed.py --host https://serve-validation-bd88h.cld-kvedzwag2qa8i5bj.s.anyscaleuserdata-staging.com --processes 44 --exit-code-on-error 0
   image_uri: anyscale/ray:nightly-py310
   env_vars:
     ANYSCALE_SERVICE_TOKEN: "${ANYSCALE_SERVICE_TOKEN}"
@@ -24,5 +24,8 @@ job_config:
   compute_config:
     cloud: anyscale_v2_default_cloud
     head_node:
-      instance_type: m7i.24xlarge
+      # m7i.12xlarge (48 vCPU): generator peaked at ~33 cores on the old
+      # m7i.24xlarge (2026-08-02 run) -> ~69% peak here, still oversized per
+      # design Risk 8. --processes 44 keeps workers <= cores.
+      instance_type: m7i.12xlarge
   max_retries: 0
