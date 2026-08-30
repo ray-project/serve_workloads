@@ -6,11 +6,11 @@ from ray import serve
 from starlette.requests import Request
 
 from serve_validation.common import actor_options, simulate_encoder_ms, simulate_short_cpu_ms
-from serve_validation.config import _with_max, AUTOSCALE_GROWTH
+from serve_validation.config import _with_floor, AUTOSCALE_GROWTH
 
 tok_opts = dict(
     name="nlp-tokenizer",
-    autoscaling_config=_with_max(AUTOSCALE_GROWTH, 80),
+    autoscaling_config=_with_floor(AUTOSCALE_GROWTH, 80, 2),
     ray_actor_options=actor_options(num_cpus=0.5),
     health_check_period_s=10,
     health_check_timeout_s=30,
@@ -18,7 +18,7 @@ tok_opts = dict(
 )
 enc_opts = dict(
     name="nlp-encoder",
-    autoscaling_config=_with_max(AUTOSCALE_GROWTH, 160),
+    autoscaling_config=_with_floor(AUTOSCALE_GROWTH, 160, 2),
     ray_actor_options=actor_options(num_cpus=0.5, simulated_gpu=True),
     health_check_period_s=10,
     health_check_timeout_s=30,
@@ -26,7 +26,7 @@ enc_opts = dict(
 )
 post_opts = dict(
     name="nlp-postprocessor",
-    autoscaling_config=_with_max(AUTOSCALE_GROWTH, 80),
+    autoscaling_config=_with_floor(AUTOSCALE_GROWTH, 80, 2),
     ray_actor_options=actor_options(num_cpus=0.5),
     health_check_period_s=10,
     health_check_timeout_s=30,

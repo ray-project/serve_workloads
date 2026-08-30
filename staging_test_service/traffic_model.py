@@ -76,7 +76,29 @@ def heavy_payload() -> dict:
 
 
 def long_payload() -> dict:
-    return {"seconds": round(random.uniform(30.0, 120.0), 1)}
+    # 8-20s (was 30-60s, 2026-08-29; 30-120s before 2026-08-21). The request
+    # ceiling sets the floor for RAY_SERVE_HAPROXY_HARD_STOP_AFTER_S: a
+    # soft-stopping HAProxy worker must outlive the longest request it may
+    # still be serving, and that hard-stop in turn bounds how long a stale,
+    # frozen-config worker can route to a replica that has already exited.
+    #
+    # 2026-08-29 SPOT EXPERIMENT. Cut again to let hard-stop reach 30s, which
+    # is what makes the whole retirement fit inside AWS's 120s spot notice:
+    # detection <=10s + the 60s drain action must cover ALB deregistration
+    # (~15s) plus the 30s replica hold, and a 100s hard-stop never fitted.
+    # 30s hard-stop also closes the 30s/100s stale-config mismatch exactly
+    # (see ~/Work/haproxy-stale-config-node-removal-issue.md).
+    #
+    # Measured 2026-08-28 (n=408): transport+queueing overhead above the
+    # requested sleep was p50 0.3s / p99 0.1s, so 6s of headroom under
+    # request_timeout_s (26) is generous. One request of 408 landed in the
+    # (60s,70s] bucket, which the 10s-wide bucket cannot resolve further --
+    # hence headroom in seconds rather than sub-second.
+    #
+    # NOTE: this narrows what the service validates (long requests are the
+    # point of this app). Revert to 30-60s when the spot experiment ends.
+    # Keep in sync with long_runner.py's clamp.
+    return {"seconds": round(random.uniform(8.0, 20.0), 1)}
 
 
 # ---------------------------------------------------------------------------

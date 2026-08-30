@@ -21,7 +21,7 @@ from serve_validation.config import _with_max, AUTOSCALE_DIURNAL
     health_check_period_s=10,
     health_check_timeout_s=30,
     max_ongoing_requests=1000,
-    graceful_shutdown_timeout_s=1200,
+    graceful_shutdown_timeout_s=20,
 )
 class StreamChat:
     async def __call__(self, request: Request):
