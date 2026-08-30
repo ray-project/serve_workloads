@@ -456,6 +456,151 @@ def upload_artifacts(results_dir: Path) -> Optional[str]:
         return None
 
 
+# ---------------------------------------------------------------------------
+# Distributed mode (--distributed): locust master on this (head) node, and
+# `--workers-per-node` locust worker processes on every Ray worker node of the
+# Job cluster (provisioned by compute_config in schedules/*.yaml). Rationale:
+# a single generator box pins its cores during the compressed 5x spike bursts
+# (user spawn + TLS handshakes) and inflates measured tail latencies — locust
+# prints "CPU usage was too high…" when that happens. Splitting workers across
+# nodes keeps every worker's core cold enough that client-side timestamps stay
+# honest. Ray ships working_dir + pip requirements to the worker nodes, so
+# they can exec the same locustfile.
+# ---------------------------------------------------------------------------
+
+_WORKER_ENV_KEYS = ("ANYSCALE_SERVICE_TOKEN",)
+
+
+def _worker_env() -> dict:
+    """Env vars a locust worker needs (auth token + LOCUST_* knobs). Ray tasks
+    do not inherit the driver's os.environ, so forward these explicitly."""
+    env = {k: v for k, v in os.environ.items() if k.startswith("LOCUST_")}
+    for key in _WORKER_ENV_KEYS:
+        if key in os.environ:
+            env[key] = os.environ[key]
+    return env
+
+
+def _locust_worker_entry(cmd: list, extra_env: dict) -> int:
+    """Runs on a Ray worker node: exec one `locust --worker --processes N`
+    (locust forks N single-core workers) and block until the master stops it."""
+    import os as _os
+    import subprocess as _subprocess
+
+    return _subprocess.run(
+        cmd, env={**_os.environ, **extra_env}, check=False
+    ).returncode
+
+
+def detect_locust_worker_nodes(*, retries: int = 12, delay_s: float = 10.0) -> list:
+    """Node ids of alive Ray nodes other than this one.
+
+    Retries briefly (worker nodes can register a little after the entrypoint
+    starts). Returns an empty list — never raises — when Ray is unavailable or
+    the cluster is single-node, so callers can fall back to local --processes
+    mode (e.g. laptop runs and --dry-run outside a cluster).
+    """
+    try:
+        import ray
+
+        ray.init(address="auto", ignore_reinit_error=True, log_to_driver=False)
+        head_ip = ray.util.get_node_ip_address()
+        for attempt in range(max(1, retries)):
+            nodes = [
+                n["NodeID"]
+                for n in ray.nodes()
+                if n.get("Alive") and n.get("NodeManagerAddress") != head_ip
+            ]
+            if nodes:
+                return nodes
+            if attempt < retries - 1:
+                print(
+                    f"No Ray worker nodes yet (attempt {attempt + 1}/{retries}); "
+                    f"retrying in {delay_s:.0f}s…",
+                    flush=True,
+                )
+                time.sleep(delay_s)
+        return []
+    except Exception as exc:
+        print(
+            f"Ray worker-node detection failed ({exc}); running single-node.",
+            file=sys.stderr,
+        )
+        return []
+
+
+def launch_locust_workers(
+    node_ids: Sequence,
+    *,
+    locustfile: Path,
+    workers_per_node: int,
+) -> list:
+    """Start one launcher task per worker node, each exec'ing
+    `locust --worker --processes N --master-host <this node>`. Workers retry
+    connecting, so launching before the master process is fine."""
+    import ray
+    from ray.util.scheduling_strategies import NodeAffinitySchedulingStrategy
+
+    master_ip = ray.util.get_node_ip_address()
+    cmd = [
+        "locust",
+        "-f",
+        str(locustfile),
+        "--worker",
+        "--processes",
+        str(workers_per_node),
+        "--master-host",
+        master_ip,
+    ]
+    env = _worker_env()
+    task = ray.remote(_locust_worker_entry)
+    refs = []
+    for node_id in node_ids:
+        refs.append(
+            task.options(
+                # Hard node affinity + zero logical CPUs: exactly one launcher
+                # per node, and scheduling can never be blocked by CPU
+                # bookkeeping (nothing else runs on this job cluster).
+                num_cpus=0,
+                scheduling_strategy=NodeAffinitySchedulingStrategy(
+                    node_id=node_id, soft=False
+                ),
+            ).remote(cmd, env)
+        )
+    print(
+        f"Launched {len(refs)} locust worker launcher(s), "
+        f"{workers_per_node} worker processes each.",
+        flush=True,
+    )
+    return refs
+
+
+def reap_locust_workers(refs: Sequence) -> None:
+    """Best-effort join after the master exits (workers stop on their own when
+    the master goes away). Never raises; never masks the master's exit code."""
+    if not refs:
+        return
+    try:
+        import ray
+
+        done, pending = ray.wait(list(refs), num_returns=len(refs), timeout=120)
+        for ref in pending:
+            ray.cancel(ref, force=True)
+        codes = []
+        for ref in done:
+            try:
+                codes.append(ray.get(ref))
+            except Exception as exc:
+                codes.append(f"error({exc})")
+        print(
+            f"Locust worker launchers finished: {len(done)} joined "
+            f"(exit codes {codes}), {len(pending)} force-cancelled.",
+            flush=True,
+        )
+    except Exception as exc:
+        print(f"Reaping locust workers failed: {exc}", file=sys.stderr)
+
+
 def _build_locust_command(
     *,
     locustfile: Path,
@@ -465,16 +610,33 @@ def _build_locust_command(
     csv_prefix: Path,
     html_path: Path,
     extra_args: Sequence[str],
+    distributed_workers: int = 0,
+    expect_workers_max_wait: int = 300,
 ) -> list[str]:
-    return [
+    cmd = [
         "locust",
         "-f",
         str(locustfile),
         "--headless",
         "--host",
         host,
-        "--processes",
-        str(processes),
+    ]
+    if distributed_workers > 0:
+        # Master mode: workers run on other nodes (launch_locust_workers).
+        # --expect-workers-max-wait makes a missing node fail the run loudly
+        # instead of stalling it forever.
+        cmd += [
+            "--master",
+            "--master-bind-host",
+            "0.0.0.0",
+            "--expect-workers",
+            str(distributed_workers),
+            "--expect-workers-max-wait",
+            str(expect_workers_max_wait),
+        ]
+    else:
+        cmd += ["--processes", str(processes)]
+    cmd += [
         "--exit-code-on-error",
         str(exit_code_on_error),
         "--csv",
@@ -483,6 +645,7 @@ def _build_locust_command(
         str(html_path),
         *extra_args,
     ]
+    return cmd
 
 
 def _parse_args(argv: Optional[Sequence[str]] = None) -> tuple[argparse.Namespace, list[str]]:
@@ -501,7 +664,29 @@ def _parse_args(argv: Optional[Sequence[str]] = None) -> tuple[argparse.Namespac
         "--processes",
         type=int,
         default=int(os.environ.get("LOCUST_PROCESSES", "16")),
-        help="Number of Locust worker processes.",
+        help="Number of Locust worker processes (single-node mode, and the "
+        "fallback when --distributed finds no Ray worker nodes).",
+    )
+    parser.add_argument(
+        "--distributed",
+        action="store_true",
+        default=os.environ.get("LOCUST_DISTRIBUTED", "").lower()
+        in ("1", "true", "yes"),
+        help="Run the locust master here and --workers-per-node locust worker "
+        "processes on every Ray worker node of the job cluster.",
+    )
+    parser.add_argument(
+        "--workers-per-node",
+        type=int,
+        default=int(os.environ.get("LOCUST_WORKERS_PER_NODE", "30")),
+        help="Locust worker processes per Ray worker node in --distributed mode.",
+    )
+    parser.add_argument(
+        "--expect-workers-max-wait",
+        type=int,
+        default=int(os.environ.get("LOCUST_EXPECT_WORKERS_MAX_WAIT", "300")),
+        help="Seconds the master waits for all distributed workers to connect "
+        "before aborting the run.",
     )
     parser.add_argument(
         "--exit-code-on-error",
@@ -530,6 +715,15 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     html_path = results_dir / "report.html"
     stats_path = results_dir / "run_stats.csv"
 
+    worker_nodes = detect_locust_worker_nodes() if args.distributed else []
+    distributed_workers = len(worker_nodes) * args.workers_per_node
+    if args.distributed and not worker_nodes:
+        print(
+            "--distributed set but no Ray worker nodes found; "
+            f"falling back to local --processes {args.processes}.",
+            file=sys.stderr,
+        )
+
     locust_cmd = _build_locust_command(
         locustfile=args.locustfile,
         host=args.host,
@@ -538,13 +732,29 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         csv_prefix=csv_prefix,
         html_path=html_path,
         extra_args=extra_args,
+        distributed_workers=distributed_workers,
+        expect_workers_max_wait=args.expect_workers_max_wait,
     )
 
     if args.dry_run:
         print("Would run:", subprocess.list2cmdline(locust_cmd))
+        if distributed_workers:
+            print(
+                f"Would launch {len(worker_nodes)} worker launcher(s) x "
+                f"{args.workers_per_node} locust workers."
+            )
         return 0
 
     results_dir.mkdir(parents=True, exist_ok=True)
+    worker_refs = (
+        launch_locust_workers(
+            worker_nodes,
+            locustfile=args.locustfile,
+            workers_per_node=args.workers_per_node,
+        )
+        if distributed_workers
+        else []
+    )
     started = time.monotonic()
     exit_code = 1
     error = None
@@ -557,6 +767,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(error, file=sys.stderr)
 
     duration_s = time.monotonic() - started
+    reap_locust_workers(worker_refs)
     stats = parse_stats_csv(stats_path)
     artifact_uri = upload_artifacts(results_dir)
     ok = exit_code == 0

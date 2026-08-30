@@ -24,12 +24,35 @@ compute_config:
   head_node:
     # BaselinePinger runs num_cpus:2 (set in code): the single send loop holds
     # ~11 in-flight (1 per deployment) + body reads and needs dedicated cores.
-    # m7i.large = 2 vCPU / 8 GiB, exactly matching the num_cpus:2 request;
-    # measured usage on the old m7i.2xlarge was ~0.35 core / 2.2 GiB (2026-08-03).
-    # Bump the instance if the loop saturates at larger pool sizes. Keep
+    # m7i.xlarge (4 vCPU / 16 GiB): the earlier m7i.large downsize (2026-08-14)
+    # ignored Ray's head-node daemons (GCS/raylet/dashboard ≈ 1+ core) on top
+    # of the pinger loop — measured 80-83% CPU around the clock with 99.7%
+    # peaks on 2 vCPU (2026-08-21). A near-saturated pinger delays its own
+    # request timestamps and can fake latency/failure alerts, so 2 vCPU is
+    # under the floor for measurement integrity. Keep
     # on-demand: this is the traffic source; a spot reclaim would fake a
     # zero-traffic gap on the service under test.
-    instance_type: m7i.large
+    instance_type: m7i.xlarge
+    # Keep this head node out of the cloud GC reaper. Cloud Custodian's
+    # gc-instances policy (anyscale/custodian, garbage-collection/policy.yaml,
+    # deployed as lambda custodian-gc-instances in AWS 188439194153) stops every
+    # running on-demand instance older than 12h that has no future
+    # anyscale-expiration tag. It killed this head node on 2026-08-05 09:06Z and
+    # 2026-08-12 08:06Z (CloudTrail StopInstances / Username
+    # custodian-gc-instances); each kill is a ~96s zero-traffic gap on the
+    # service under test, i.e. exactly the false signal the on-demand note above
+    # is guarding against. ttl-hours is converted to anyscale-expiration by
+    # tagging-lambda-dev-cloud_dogfood-run; the anyscale-user/anyscale-custodian
+    # pair the policy also honours is unusable because ec2.ValidateTags rejects
+    # any anyscale-prefixed key. Head node only, deliberately: this cluster has
+    # no workers, and see anyscale_service.yaml for why its workers stay
+    # reapable.
+    advanced_instance_config:
+      TagSpecifications:
+        - ResourceType: instance
+          Tags:
+            - Key: ttl-hours
+              Value: "8760"  # 1 year
 
 env_vars:
   ANYSCALE_SERVICE_TOKEN: "${ANYSCALE_SERVICE_TOKEN}"

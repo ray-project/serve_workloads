@@ -116,6 +116,18 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
     html_path = results_dir / "report.html"
     stats_path = results_dir / "run_stats.csv"
 
+    # Distributed mode (see base module): master here, workers on the job
+    # cluster's worker nodes. Falls back to local --processes when the
+    # cluster has none (laptop runs, --dry-run outside a cluster).
+    worker_nodes = base.detect_locust_worker_nodes() if args.distributed else []
+    distributed_workers = len(worker_nodes) * args.workers_per_node
+    if args.distributed and not worker_nodes:
+        print(
+            "--distributed set but no Ray worker nodes found; "
+            f"falling back to local --processes {args.processes}.",
+            file=sys.stderr,
+        )
+
     locust_cmd = base._build_locust_command(
         locustfile=args.locustfile,
         host=args.host,
@@ -124,13 +136,29 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         csv_prefix=csv_prefix,
         html_path=html_path,
         extra_args=extra_args,
+        distributed_workers=distributed_workers,
+        expect_workers_max_wait=args.expect_workers_max_wait,
     )
 
     if args.dry_run:
         print("Would run:", subprocess.list2cmdline(locust_cmd))
+        if distributed_workers:
+            print(
+                f"Would launch {len(worker_nodes)} worker launcher(s) x "
+                f"{args.workers_per_node} locust workers."
+            )
         return 0
 
     results_dir.mkdir(parents=True, exist_ok=True)
+    worker_refs = (
+        base.launch_locust_workers(
+            worker_nodes,
+            locustfile=args.locustfile,
+            workers_per_node=args.workers_per_node,
+        )
+        if distributed_workers
+        else []
+    )
     started = time.monotonic()
     exit_code = 1
     error = None
@@ -143,6 +171,7 @@ def main(argv: Optional[Sequence[str]] = None) -> int:
         print(error, file=sys.stderr)
 
     duration_s = time.monotonic() - started
+    base.reap_locust_workers(worker_refs)
 
     # Render report_detailed.html before uploading so it is part of the
     # artifact copy. Best-effort: never masks Locust's exit code.
