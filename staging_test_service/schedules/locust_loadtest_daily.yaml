@@ -3,14 +3,22 @@
 # expand it through envsubst before piping to anyscale):
 #   export ANYSCALE_SERVICE_TOKEN=...   # service bearer token
 #   export SLACK_WEBHOOK_URL=...        # optional Slack notification webhook
-#   envsubst < schedules/locust_loadtest.yaml | anyscale schedule apply -f -
+#   export SLACK_BOT_TOKEN=... SLACK_CHANNEL=...
+#   envsubst < schedules/locust_loadtest_daily.yaml | anyscale schedule apply -f -
 timezone: America/Los_Angeles
 cron_expression: "0 11 * * *"
 job_config:
   name: serve-validation-locust-daily
   project: serve-testing
+  # --distributed: locust master on the head node, 30 worker processes on each
+  # of the 3 worker nodes below (90 total). One 96-core box pinned its workers
+  # during the compressed 5x spike bursts (locust logged "CPU usage was too
+  # high…", 2026-08-19/21 runs) and inflated measured tails on the sub-10ms
+  # endpoints; splitting the spawn burst across machines keeps client-side
+  # timestamps honest. Acceptance check after any change here: zero locust
+  # CPU warnings in the job log.
   entrypoint: >-
-    python run_locust_detailed.py --host https://serve-validation-bd88h.cld-kvedzwag2qa8i5bj.s.anyscaleuserdata-staging.com --processes 44 --exit-code-on-error 0
+    python run_locust_detailed.py --host https://serve-validation-bd88h.cld-kvedzwag2qa8i5bj.s.anyscaleuserdata-staging.com --distributed --workers-per-node 30 --exit-code-on-error 0
   image_uri: anyscale/ray:nightly-py310
   env_vars:
     ANYSCALE_SERVICE_TOKEN: "${ANYSCALE_SERVICE_TOKEN}"
@@ -24,8 +32,19 @@ job_config:
   compute_config:
     cloud: anyscale_v2_default_cloud
     head_node:
-      # m7i.12xlarge (48 vCPU): generator peaked at ~33 cores on the old
-      # m7i.24xlarge (2026-08-02 run) -> ~69% peak here, still oversized per
-      # design Risk 8. --processes 44 keeps workers <= cores.
-      instance_type: m7i.12xlarge
+      # Master + timeseries collector + report generation only — locust
+      # workers run on the worker group. Measured master peak 12.4% CPU /
+      # 8.6 GiB in distributed runs (2026-08-21), so 4 vCPU / 16 GiB fits.
+      instance_type: m7i.xlarge
+    worker_nodes:
+      # 3 x 32 vCPU = 96 worker cores: same hourly price as the previous
+      # single m7i.24xlarge (3 x $1.6128 = $4.84), but the spike-window user
+      # spawn (greenlets + TLS handshakes) is split three ways. Fixed size
+      # (min=max) so --expect-workers 90 is deterministic; the master aborts
+      # after --expect-workers-max-wait if a node goes missing.
+      - name: locust-workers
+        instance_type: m7i.8xlarge
+        min_nodes: 3
+        max_nodes: 3
+        market_type: ON_DEMAND
   max_retries: 0

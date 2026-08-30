@@ -16,7 +16,11 @@ from ray import serve
 from starlette.requests import Request
 
 from serve_validation.common import actor_options
-from serve_validation.config import _with_max, AUTOSCALE_STABLE, AUTOSCALE_STABLE_MUX_WORKER
+from serve_validation.config import (
+    _with_max,
+    AUTOSCALE_STABLE_MUX_INGRESS,
+    AUTOSCALE_STABLE_MUX_WORKER,
+)
 
 
 class _FakeModel:
@@ -30,7 +34,8 @@ class _FakeModel:
 
 _ingress_opts = dict(
     name="mux-ingress",
-    autoscaling_config=_with_max(AUTOSCALE_STABLE, 72),
+    # Mux-only target=1 preset (spike-response experiment, see config.py).
+    autoscaling_config=_with_max(AUTOSCALE_STABLE_MUX_INGRESS, 72),
     ray_actor_options=actor_options(num_cpus=0.5),  # 0.5 per design §2
     health_check_period_s=10,
     health_check_timeout_s=30,
