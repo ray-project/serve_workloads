@@ -49,8 +49,16 @@ compute_config:
       instance_type: c6i.4xlarge
       min_nodes: 0
       max_nodes: 150
-      # Spot-first with on-demand fallback (design §3.1/§11 priced workers as spot;
-      # Risk 7: interruptions exercise node-loss recovery and are acceptable).
+      # PREFER_SPOT. main sits on ON_DEMAND because retirement did not fit
+      # inside AWS's 120s notice: hard-stop was 400s against a <=10s detection
+      # plus 60s drain action, so a reclaim cut requests mid-flight and produced
+      # client-visible failures indistinguishable from a Serve regression -- the
+      # one thing this service exists to detect. The rest of this branch is what
+      # closes that gap (20s request ceiling, hard-stop 400 -> 30, per-deployment
+      # graceful shutdowns, warm floors), so spot comes back on here and nowhere
+      # else. This restores design §3.1/§11's original pricing and Risk 7's
+      # position that interruptions usefully exercise node-loss recovery.
+      # Revert this line with the rest of the branch, never on its own.
       market_type: PREFER_SPOT
     - name: cpu-gpu-sim
       instance_type: c6i.4xlarge
