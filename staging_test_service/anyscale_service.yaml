@@ -64,11 +64,31 @@ compute_config:
       instance_type: c6i.4xlarge
       min_nodes: 0
       max_nodes: 49
-      # Deliberately ON_DEMAND while cpu-general runs spot: the mux workers
-      # schedule here (simulated_gpu), and mux is the deployment least able to
-      # survive losing warm replicas -- each MuxModelWorker blocks readiness
-      # until all 20 models are pre-loaded, so it recovers slowly.
-      market_type: ON_DEMAND
+      # PREFER_SPOT. Earlier in this branch this group was ON_DEMAND, on the
+      # argument that mux recovers slowest from losing warm replicas because
+      # MuxModelWorker blocks readiness until all 20 models are pre-loaded.
+      # That argument does not survive measurement, so it is withdrawn:
+      #   - _prewarm() loads all 20 concurrently (asyncio.gather) and each load
+      #     is a 10-40ms sleep over a 1-8 KiB bytearray. The preload is ~40ms of
+      #     work, not a warm-up worth protecting.
+      #   - measured mean replica startup, 7d to 2026-08-31 (Prometheus,
+      #     ray_serve_replica_startup_latency_ms, n=477): mux-model-worker 30s
+      #     vs mux-ingress 27s. The ingress loads no models at all, so the whole
+      #     20-model preload costs ~3s of a ~30s startup. Three deployments
+      #     start slower than the mux worker; two of them (heavy-payload 44s,
+      #     grpc-canary 40s) sit on cpu-general and are already on spot.
+      # Mux is not special, and this group is not a rounding error: it carries
+      # 3,014 of the 3,226 measured worker node-hours/month (93%), because the
+      # simulated_gpu: 8 cap below packs 8 replicas onto a 16-vCPU node where
+      # CPU alone would take 32, and these nodes also absorb the CPU-only work.
+      # On-demand $0.680/h against us-west-2 spot $0.244/h, at the 78% spot fill
+      # this group has historically achieved, is ~$1,000/month.
+      #
+      # Residual exposure is generic to spot rather than mux-specific: any
+      # min_replicas=1 deployment landing here (mux-model-worker, stream-chat,
+      # mixed-preprocess) loses its only warm replica to a reclaim and pays a
+      # full cold start. Raise those floors before calling this shut.
+      market_type: PREFER_SPOT
       # Expose simulated_gpu on this group (logical resources on the node).
       resources:
         simulated_gpu: 8
