@@ -49,14 +49,19 @@ compute_config:
       instance_type: c6i.4xlarge
       min_nodes: 0
       max_nodes: 150
-      # Spot-first with on-demand fallback (design §3.1/§11 priced workers as spot;
-      # Risk 7: interruptions exercise node-loss recovery and are acceptable).
-      market_type: PREFER_SPOT
+      # ON_DEMAND on main. design §3.1/§11 priced workers as spot and Risk 7
+      # treats interruptions as acceptable in principle, but a reclaim currently
+      # costs load-test integrity: node retirement does not reliably complete
+      # inside AWS's 120s notice, so a preemption mid-run produces
+      # client-visible failures indistinguishable from a Serve regression --
+      # the one thing this service exists to detect. Spot stays on a branch
+      # until the retirement path fits the notice.
+      market_type: ON_DEMAND
     - name: cpu-gpu-sim
       instance_type: c6i.4xlarge
       min_nodes: 0
       max_nodes: 49
-      market_type: PREFER_SPOT  # see cpu-general note
+      market_type: ON_DEMAND  # see cpu-general note
       # Expose simulated_gpu on this group (logical resources on the node).
       resources:
         simulated_gpu: 8
