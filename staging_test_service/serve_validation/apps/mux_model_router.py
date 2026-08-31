@@ -17,6 +17,7 @@ from starlette.requests import Request
 
 from serve_validation.common import actor_options
 from serve_validation.config import (
+    _with_floor,
     _with_max,
     AUTOSCALE_STABLE_MUX_INGRESS,
     AUTOSCALE_STABLE_MUX_WORKER,
@@ -44,7 +45,11 @@ _ingress_opts = dict(
 
 _worker_opts = dict(
     name="mux-model-worker",
-    autoscaling_config=_with_max(AUTOSCALE_STABLE_MUX_WORKER, 72),
+    # Floor 1 -> 2 (2026-08-31): cpu-gpu-sim is on spot. 30s mean startup (7d,
+    # n=477), of which the 20-model _prewarm below is only ~3s -- mux-ingress,
+    # which loads nothing, starts in 27s. So the floor is here for the ordinary
+    # reason every spot deployment needs one, not because the models are slow.
+    autoscaling_config=_with_floor(AUTOSCALE_STABLE_MUX_WORKER, 72, 2),
     ray_actor_options=actor_options(num_cpus=0.5, simulated_gpu=True),  # 0.5 per design §2
     health_check_period_s=10,
     health_check_timeout_s=30,

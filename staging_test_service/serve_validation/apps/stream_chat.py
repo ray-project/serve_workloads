@@ -11,12 +11,15 @@ from starlette.requests import Request
 from starlette.responses import StreamingResponse
 
 from serve_validation.common import actor_options
-from serve_validation.config import _with_max, AUTOSCALE_DIURNAL
+from serve_validation.config import _with_floor, AUTOSCALE_DIURNAL
 
 
 @serve.deployment(
     name="stream-chat",
-    autoscaling_config=_with_max(AUTOSCALE_DIURNAL, 512),
+    # Floor 1 -> 2 (2026-08-31): cpu-gpu-sim is on spot, and this is the slowest
+    # replica in the service to come back (43s mean startup, 7d, n=3108). At a
+    # floor of 1 a reclaim removes the deployment until that completes.
+    autoscaling_config=_with_floor(AUTOSCALE_DIURNAL, 512, 2),
     ray_actor_options=actor_options(num_cpus=0.5, simulated_gpu=True),  # 0.5 per design §2
     health_check_period_s=10,
     health_check_timeout_s=30,

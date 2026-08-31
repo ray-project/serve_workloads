@@ -163,8 +163,17 @@ def _with_floor(
     floor. Applied here, not on the shared presets, because AUTOSCALE_SPIKY_T2 is
     also used by batch-infer, which is not part of this change.
 
+    2026-08-31: extended to min_replicas=1 deployments once both worker groups
+    moved to PREFER_SPOT. A floor of 1 is a single point of failure under spot:
+    the reclaim takes the only warm replica and the next request waits out a full
+    cold start -- measured mean 30s for mux-model-worker, 43s for stream-chat,
+    27s for mixed-preprocess-gpu. Two replicas mean a reclaim degrades capacity
+    instead of removing the deployment. Same reason as above, different starting
+    point, so the same helper covers both.
+
     Trade-off: min_replicas=0 was deliberate -- it is how scale-from-zero gets
-    validated. This buys clean runs by removing that coverage for these four apps.
+    validated -- and min_replicas=1 exercised recovery from a single replica.
+    This buys clean runs by removing both kinds of coverage where it is applied.
     """
     return base.copy(
         update={"max_replicas": max_replicas, "min_replicas": min_replicas}
