@@ -51,9 +51,10 @@ applications:
     route_prefix: /heavy-payload
     import_path: serve_validation.apps.heavy_payload:app
 
-  - name: long-runner
-    route_prefix: /long-runner
-    import_path: serve_validation.apps.long_runner:app
+  # long-runner disabled 2026-08-31; see anyscale_service.yaml.
+  # - name: long-runner
+  #   route_prefix: /long-runner
+  #   import_path: serve_validation.apps.long_runner:app
 
   - name: highscale-stress
     route_prefix: /highscale

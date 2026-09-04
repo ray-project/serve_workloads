@@ -49,30 +49,29 @@ compute_config:
       instance_type: c6i.4xlarge
       min_nodes: 0
       max_nodes: 150
-      # ON_DEMAND on main. design §3.1/§11 priced workers as spot and Risk 7
-      # treats interruptions as acceptable in principle, but a reclaim currently
-      # costs load-test integrity: node retirement does not reliably complete
-      # inside AWS's 120s notice, so a preemption mid-run produces
-      # client-visible failures indistinguishable from a Serve regression --
-      # the one thing this service exists to detect. Spot stays on a branch
-      # until the retirement path fits the notice.
-      market_type: ON_DEMAND
+      # PREFER_SPOT (design §3.1/§11, Risk 7). Depends on the compressed ladder
+      # and warm floors in this branch -- do not revert this line on its own.
+      market_type: PREFER_SPOT
     - name: cpu-gpu-sim
       instance_type: c6i.4xlarge
       min_nodes: 0
       max_nodes: 49
-      market_type: ON_DEMAND  # see cpu-general note
+      # PREFER_SPOT. Held back at first for mux, but the 20-model prewarm turned
+      # out to be ~3s of a 30s startup, so mux is not special. This group carries
+      # 93% of worker node-hours (the simulated_gpu: 8 cap packs 8 replicas onto
+      # a 16-vCPU node), so it is where the ~$1,000/month of spot saving lives.
+      market_type: PREFER_SPOT
       # Expose simulated_gpu on this group (logical resources on the node).
       resources:
         simulated_gpu: 8
 
 # Omit http_options.host/port and grpc_options.port — set by Anyscale.
 http_options:
-  # Ray Serve proxy → replica timeout. Sized for long-runner (sleeps up to 125s,
-  # design SLO P99 < 130s). Note: the Anyscale platform Envoy/ALB has its own
-  # idle/request timeout (~300s observed) that this YAML cannot override; for
-  # caps above 300s, escalate to the Anyscale platform team.
-  request_timeout_s: 180
+  # 180 -> 26. Sits above the request ceiling (stream-chat, 2-15s) and below
+  # RAY_SERVE_HAPROXY_TIMEOUT_SERVER_S (28) so an overrun is a clean replica 408
+  # rather than a generic HAProxy 500. The platform Envoy/ALB has its own
+  # ~300s timeout that this YAML cannot override.
+  request_timeout_s: 26
   keep_alive_timeout_s: 3600 # (should be >= to AWS ALB idle timeout)
 
 grpc_options:
@@ -102,8 +101,14 @@ env_vars:
   # RAY_SERVE_HAPROXY_RELOAD_TIMEOUT_S: "60"
   RAY_SERVE_HAPROXY_RETRIES: "1000" # check this later ----
 
-  RAY_SERVE_HAPROXY_HARD_STOP_AFTER_S: "400"
-  RAY_SERVE_HAPROXY_TIMEOUT_SERVER_S: "240"
+  # 400 -> 30. Lifetime of a soft-stopping HAProxy worker, so also the
+  # stale-routing window. At 30 it equals RAY_SERVE_DIRECT_INGRESS_MIN_DRAINING_PERIOD_S,
+  # and the whole retirement fits inside AWS's 120s notice. Do not set it below
+  # the longest request -- hard-stop SIGKILLs whatever is still running.
+  RAY_SERVE_HAPROXY_HARD_STOP_AFTER_S: "30"
+  # 240 -> 28. Above the request ceiling (stream-chat, 2-15s) and at/below
+  # hard-stop, so HAProxy never waits longer than the worker will exist.
+  RAY_SERVE_HAPROXY_TIMEOUT_SERVER_S: "28"
   RAY_SERVE_HAPROXY_TIMEOUT_CONNECT_S: "5"
   RAY_SERVE_PORT_QUARANTINE_S: "600"
   RAY_SERVE_QUEUE_LENGTH_RESPONSE_DEADLINE_S: "0.5"
@@ -131,20 +136,13 @@ env_vars:
   # falls back to the 120000 bucket until this rollout lands.
   RAY_SERVE_REPLICA_STARTUP_SHUTDOWN_LATENCY_BUCKETS_MS: "5,20,50,100,250,500,1000,2000,5000,10000,20000,30000,60000,120000,180000,240000"
 
-  # Default buckets + 15000, 30000, 130000, 150000: feeds
-  # serve_deployment_processing_latency_ms (replica.py), which the
-  # "Per-app P99 latency over design target" Grafana alert quantiles. The
-  # default buckets jump 120000 -> 300000, so long-runner's 130s SLO was
-  # unmeasurable: any single ~120.0s request (the pinger's own max draw,
-  # P = 0.05/90 per request) interpolated P99 to ~282s and fired a false
-  # "2.17x over target" alert ~0.7x/day (RCA 2026-08-03). With a 130000
-  # bound, 120.x s requests interpolate inside (120s,130s] -> ratio <= 1.0
-  # (silent); only genuine >130s P99 fires. 150000 (= pinger client timeout)
-  # keeps the fired value honest instead of interpolating into the 130->300
-  # gap. 15000/30000 make stream-chat's designed 2-30s streams measurable
-  # (rule annotation's documented 10s->60s blind spot; its divisor can drop
-  # from the 60001 hack to 30001 once this lands).
-  RAY_SERVE_REQUEST_LATENCY_BUCKETS_MS: "1,2,5,10,20,50,100,200,300,400,500,1000,2000,5000,10000,15000,30000,60000,120000,130000,150000,300000,600000"
+  # Default buckets + 15000/30000/70000/90000. The old 130000/150000 bounds
+  # existed for long-runner's 120s requests (RCA 2026-08-03); with that app off,
+  # nothing reaches them. 15000/30000 make stream-chat's 2-15s streams measurable.
+  #
+  # ACTION REQUIRED: the Grafana rule and the Notion table still carry
+  # long-runner's 130s SLO. Retire it along with the app.
+  RAY_SERVE_REQUEST_LATENCY_BUCKETS_MS: "1,2,5,10,20,50,100,200,300,400,500,1000,2000,5000,10000,15000,30000,60000,70000,90000,120000,300000,600000"
 
   RAY_SERVE_USE_COMPACT_SCHEDULING_STRATEGY: "0"
 
@@ -185,9 +183,13 @@ applications:
     route_prefix: /heavy-payload
     import_path: serve_validation.apps.heavy_payload:app
 
-  - name: long-runner
-    route_prefix: /long-runner
-    import_path: serve_validation.apps.long_runner:app
+  # long-runner disabled 2026-08-31: the only app held long enough to be caught
+  # mid-flight by hard-stop-after (27 such 500s in the 18:31 run). Costs us
+  # coverage of long requests. Re-enable together with traffic_model.py,
+  # locustfile.py and smoke_all.py -- the route 404s if any of them lags.
+  # - name: long-runner
+  #   route_prefix: /long-runner
+  #   import_path: serve_validation.apps.long_runner:app
 
   - name: highscale-stress
     route_prefix: /highscale

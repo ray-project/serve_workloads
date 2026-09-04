@@ -307,18 +307,19 @@ class HeavyUploader(_AuthMixin, HttpUser):
 # 20-100 concurrent users, 0.1-0.5 RPS, 30-120s requests
 # ---------------------------------------------------------------------------
 
-class LongTaskSubmitter(_AuthMixin, HttpUser):
-    weight = 3  # ~50/2000
-    wait_time = between(2.0, 10.0)  # 0.1-0.5 RPS per user
-
-    @task
-    def submit(self):
-        self.client.post(
-            "/long-runner/",
-            json=long_payload(),
-            timeout=3600,
-            name="/long-runner/",
-        )
+# long-runner disabled 2026-08-31; this persona would 404 on every request.
+# class LongTaskSubmitter(_AuthMixin, HttpUser):
+#     weight = 3  # ~50/2000
+#     wait_time = between(2.0, 10.0)  # 0.1-0.5 RPS per user
+#
+#     @task
+#     def submit(self):
+#         self.client.post(
+#             "/long-runner/",
+#             json=long_payload(),
+#             timeout=3600,
+#             name="/long-runner/",
+#         )
 
 
 # ---------------------------------------------------------------------------

@@ -11,17 +11,18 @@ from starlette.requests import Request
 from starlette.responses import StreamingResponse
 
 from serve_validation.common import actor_options
-from serve_validation.config import _with_max, AUTOSCALE_DIURNAL
+from serve_validation.config import _with_floor, AUTOSCALE_DIURNAL
 
 
 @serve.deployment(
     name="stream-chat",
-    autoscaling_config=_with_max(AUTOSCALE_DIURNAL, 512),
+    # Floor 1 -> 2: on spot, and the slowest replica to restart (43s mean).
+    autoscaling_config=_with_floor(AUTOSCALE_DIURNAL, 512, 2),
     ray_actor_options=actor_options(num_cpus=0.5, simulated_gpu=True),  # 0.5 per design §2
     health_check_period_s=10,
     health_check_timeout_s=30,
     max_ongoing_requests=1000,
-    graceful_shutdown_timeout_s=1200,
+    graceful_shutdown_timeout_s=20,
 )
 class StreamChat:
     async def __call__(self, request: Request):
