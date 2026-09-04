@@ -16,6 +16,15 @@ are intentionally killed periodically.
             * Prevents all replicas from getting stuck on one node
     * 1 `NodeKiller` replica
         * Kills its node with either `ray stop --head` or `sudo halt --force`
+    * 1 `DiskLeaker` replica
+        * Logs `num_GB` of data every 30 minutes, written as 1 MiB lines so the
+          replica's peak memory stays small. `num_GB`, `chunk_MB` and
+          `startup_delay_s` are tunable through `user_config`.
+        * Pinned off the head node with the label selector
+          `ray.io/node-group: "!head"`, which Ray derives from
+          `RAY_NODE_TYPE_NAME`. A memory or disk spike on the head takes the
+          Serve controller down with it. Rename the selector value if the head
+          node type is not called `head` in your compute config.
 * `Pinger` service
     * 1 Ray cluster node (just the head node)
     * 1 `Pinger` replica

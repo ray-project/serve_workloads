@@ -31,3 +31,5 @@ applications:
       num_cpus: 0
       resources:
         leak_singleton: 1
+      label_selector:
+        ray.io/node-group: "!head"
