@@ -8,13 +8,13 @@ from ray import serve
 from starlette.requests import Request
 
 from serve_validation.common import actor_options, random_image_mb, simulate_short_cpu_ms
-from serve_validation.config import _with_max, AUTOSCALE_DECLINE
+from serve_validation.config import _with_floor, AUTOSCALE_DECLINE
 
 
 def _opts(name: str, max_r: int, sim_gpu: bool):
     return dict(
         name=name,
-        autoscaling_config=_with_max(AUTOSCALE_DECLINE, max_r),
+        autoscaling_config=_with_floor(AUTOSCALE_DECLINE, max_r, 2),
         ray_actor_options=actor_options(num_cpus=0.5, simulated_gpu=sim_gpu),
         health_check_period_s=10,
         health_check_timeout_s=30,
