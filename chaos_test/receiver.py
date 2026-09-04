@@ -113,43 +113,56 @@ class NodeKiller:
         "resources": {
             "leak_singleton": 1,
         },
+        "label_selector": {"ray.io/node-group": "!head"},
     },
 )
 class DiskLeaker:
     def __init__(self):
-        self.leak_dir = "/tmp/disk_leaker_files/"
-        self.leak_file_name = "leak_file.log"
         self.num_writes_to_disk = 0
         self.num_GB = 10
+        self.chunk_bytes = 1024 * 1024
+        self.startup_delay_s = 60
         logger.info(f"num_GB set to {self.num_GB}")
-        os.makedirs(self.leak_dir, exist_ok=True)
         run_background_task(self.leak())
 
     def reconfigure(self, config: Dict) -> None:
         if "num_GB" in config:
             self.num_GB = int(config["num_GB"])
             logger.info(f"num_GB set to {self.num_GB}")
+        if "chunk_MB" in config:
+            self.chunk_bytes = int(config["chunk_MB"]) * 1024 * 1024
+            logger.info(f"chunk_bytes set to {self.chunk_bytes}")
+        if "startup_delay_s" in config:
+            self.startup_delay_s = int(config["startup_delay_s"])
+            logger.info(f"startup_delay_s set to {self.startup_delay_s}")
 
     def info(self):
         return self.num_writes_to_disk
 
     async def write_file(self):
-        """Writes data over a period of time."""
+        """Writes data over a period of time as many small log lines."""
 
         GB = 1024 * 1024 * 1024
         time_period_m = 15
 
         for _ in range(time_period_m):
             write_start_time = time.time()
+            bytes_to_write = int((self.num_GB / time_period_m) * GB)
             logger.info(
-                f"Writing roughly {self.num_GB / time_period_m}GB to log."
+                f"Writing roughly {self.num_GB / time_period_m}GB to log "
+                f"in {self.chunk_bytes} byte lines."
             )
-            num_chars_to_write = int((self.num_GB / time_period_m) * GB)
-            logger.info("0" * num_chars_to_write)
+            written = 0
+            while written < bytes_to_write:
+                n = min(self.chunk_bytes, bytes_to_write - written)
+                logger.info("0" * n)
+                written += n
+                await asyncio.sleep(0)
             write_duration_s = time.time() - write_start_time
             await asyncio.sleep(max(0, 60 - write_duration_s))
 
     async def leak(self):
+        await asyncio.sleep(self.startup_delay_s)
         num_hours, hours = 0.5, 60 * 60
         while True:
             if self.num_GB > 0:
