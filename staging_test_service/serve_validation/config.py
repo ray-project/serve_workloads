@@ -197,6 +197,8 @@ REPLICA_BUDGET: dict[str, int] = {
     "mixed-preprocess-cpu": 128,
     "mixed-preprocess-gpu": 64,
     "heavy-payload": 128,
+    # Kept after long-runner was disabled: this is the design budget, not the
+    # deployed set, and the total below must stay at 4096.
     "long-runner": 256,
     "highscale-stress": 1536,
     "grpc-canary": 80,

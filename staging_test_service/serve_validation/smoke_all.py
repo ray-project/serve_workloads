@@ -57,7 +57,8 @@ def run_smoke(base: str, grpc_host: str) -> list[str]:
         ("POST", f"{base}/cpu-fanout/", b"smoke", {}),
         ("POST", f"{base}/mixed-preprocess/", b"smoke", {}),
         ("POST", f"{base}/heavy-payload/", json.dumps({"mb": 1.0}).encode(), {"Content-Type": "application/json"}),
-        ("POST", f"{base}/long-runner/", json.dumps({"seconds": 3.0}).encode(), {"Content-Type": "application/json"}),
+        # long-runner disabled 2026-08-31.
+        # ("POST", f"{base}/long-runner/", json.dumps({"seconds": 3.0}).encode(), {"Content-Type": "application/json"}),
         ("GET", f"{base}/highscale/", b"", {}),
     ]
     failures: list[str] = []

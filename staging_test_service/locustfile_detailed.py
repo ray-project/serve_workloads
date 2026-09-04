@@ -62,7 +62,7 @@ _USERS_HEADER = ["ts_iso", "elapsed_s", "user_count", "target_user_count"]
 _DEPLOYMENT_NOTES = {
     "/stream-chat/": "latency is time to response headers (TTFB); stream duration (2-15s by design) is excluded",
     "/batch-infer/": "includes up to 50ms server-side batch wait by design",
-    "/long-runner/": "requests sleep 30-120s by design; high latency here is intrinsic",
+    # "/long-runner/": disabled 2026-08-31.
     "/heavy-payload/": "response bodies are 5-50MB; latency is transfer dominated",
 }
 

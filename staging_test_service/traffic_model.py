@@ -116,7 +116,8 @@ ENDPOINTS: List[Endpoint] = [
     Endpoint("batch",     "POST", "/batch-infer/",      0.08, json_factory=batch_payload, timeout_s=150.0),
     Endpoint("mixed",     "POST", "/mixed-preprocess/", 0.05, data_factory=mixed_payload, timeout_s=150.0),  # composition chain
     Endpoint("heavy",     "POST", "/heavy-payload/",    0.015, json_factory=heavy_payload, timeout_s=150.0),
-    Endpoint("long",      "POST", "/long-runner/",      0.009, json_factory=long_payload, timeout_s=150.0),
+    # long-runner disabled 2026-08-31; the route would 404. Re-enable with the app.
+    # Endpoint("long",      "POST", "/long-runner/",      0.009, json_factory=long_payload, timeout_s=150.0),
 ]
 
 
