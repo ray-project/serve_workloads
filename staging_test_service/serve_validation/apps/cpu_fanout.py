@@ -8,35 +8,35 @@ from ray import serve
 from starlette.requests import Request
 
 from serve_validation.common import actor_options, simulate_short_cpu_ms
-from serve_validation.config import _with_max, AUTOSCALE_SPIKY_T2
+from serve_validation.config import _with_floor, AUTOSCALE_SPIKY_T2
 
 router_opts = dict(
     name="cpu-fanout-router",
-    autoscaling_config=_with_max(AUTOSCALE_SPIKY_T2, 64),
+    autoscaling_config=_with_floor(AUTOSCALE_SPIKY_T2, 64, 2),
     ray_actor_options=actor_options(num_cpus=0.5),
     health_check_period_s=10,
     health_check_timeout_s=60,
     max_ongoing_requests=200,
-    graceful_shutdown_timeout_s=1200,
+    graceful_shutdown_timeout_s=15,
 )
 
 worker_opts = dict(
-    autoscaling_config=_with_max(AUTOSCALE_SPIKY_T2, 64),
+    autoscaling_config=_with_floor(AUTOSCALE_SPIKY_T2, 64, 2),
     ray_actor_options=actor_options(num_cpus=0.5),
     health_check_period_s=10,
     health_check_timeout_s=60,
     max_ongoing_requests=20,
-    graceful_shutdown_timeout_s=1200,
+    graceful_shutdown_timeout_s=15,
 )
 
 agg_opts = dict(
     name="cpu-fanout-agg",
-    autoscaling_config=_with_max(AUTOSCALE_SPIKY_T2, 64),
+    autoscaling_config=_with_floor(AUTOSCALE_SPIKY_T2, 64, 2),
     ray_actor_options=actor_options(num_cpus=0.5),
     health_check_period_s=10,
     health_check_timeout_s=60,
     max_ongoing_requests=20,
-    graceful_shutdown_timeout_s=1200,
+    graceful_shutdown_timeout_s=15,
 )
 
 

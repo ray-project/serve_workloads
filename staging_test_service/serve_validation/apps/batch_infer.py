@@ -19,7 +19,7 @@ from serve_validation.config import _with_max, AUTOSCALE_SPIKY_T2
     health_check_period_s=10,
     health_check_timeout_s=30,
     max_ongoing_requests=1000,
-    graceful_shutdown_timeout_s=1200,
+    graceful_shutdown_timeout_s=15,
 )
 class BatchInfer:
     @serve.batch(max_batch_size=32, batch_wait_timeout_s=0.05)

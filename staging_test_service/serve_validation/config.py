@@ -152,6 +152,28 @@ def _with_max(base: AutoscalingConfig, max_replicas: int) -> AutoscalingConfig:
     return base.copy(update={"max_replicas": max_replicas})
 
 
+def _with_floor(
+    base: AutoscalingConfig, max_replicas: int, min_replicas: int = 2
+) -> AutoscalingConfig:
+    """_with_max plus a warm floor, applied per-deployment rather than on the preset.
+
+    2026-08-30: the 30 Aug run took 29 cold-start 408s in its first 100s on
+    nlp-chain, image-dag, cpu-fanout and long-runner -- every one of them a
+    min_replicas=0 app whose first wave landed on nothing. Those apps now keep a
+    floor. Applied here, not on the shared presets, because AUTOSCALE_SPIKY_T2 is
+    also used by batch-infer, which is not part of this change.
+
+    2026-08-31: also applied to min_replicas=1 deployments on spot, where one
+    replica is a single point of failure (30-43s cold start if it is reclaimed).
+
+    Trade-off: this removes scale-from-zero and single-replica-recovery coverage
+    wherever it is applied.
+    """
+    return base.copy(
+        update={"max_replicas": max_replicas, "min_replicas": min_replicas}
+    )
+
+
 # Peak max_replicas per deployment (design Section 2).
 REPLICA_BUDGET: dict[str, int] = {
     "echo": 64,
@@ -175,6 +197,8 @@ REPLICA_BUDGET: dict[str, int] = {
     "mixed-preprocess-cpu": 128,
     "mixed-preprocess-gpu": 64,
     "heavy-payload": 128,
+    # Kept after long-runner was disabled: this is the design budget, not the
+    # deployed set, and the total below must stay at 4096.
     "long-runner": 256,
     "highscale-stress": 1536,
     "grpc-canary": 80,

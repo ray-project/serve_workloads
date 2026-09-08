@@ -17,6 +17,7 @@ from starlette.requests import Request
 
 from serve_validation.common import actor_options
 from serve_validation.config import (
+    _with_floor,
     _with_max,
     AUTOSCALE_STABLE_MUX_INGRESS,
     AUTOSCALE_STABLE_MUX_WORKER,
@@ -44,7 +45,8 @@ _ingress_opts = dict(
 
 _worker_opts = dict(
     name="mux-model-worker",
-    autoscaling_config=_with_max(AUTOSCALE_STABLE_MUX_WORKER, 72),
+    # Floor 1 -> 2: on spot. The 20-model prewarm is only ~3s of a 30s startup.
+    autoscaling_config=_with_floor(AUTOSCALE_STABLE_MUX_WORKER, 72, 2),
     ray_actor_options=actor_options(num_cpus=0.5, simulated_gpu=True),  # 0.5 per design §2
     health_check_period_s=10,
     health_check_timeout_s=30,

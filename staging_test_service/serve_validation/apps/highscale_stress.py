@@ -18,7 +18,7 @@ from serve_validation.config import _with_max, AUTOSCALE_HIGHSCALE
     health_check_period_s=10,
     health_check_timeout_s=30,
     max_ongoing_requests=10000,
-    graceful_shutdown_timeout_s=1200,
+    graceful_shutdown_timeout_s=15,
 )
 class HighscaleStress:
     async def __call__(self, request: Request):
