@@ -64,6 +64,43 @@ compute_config:
       # Expose simulated_gpu on this group (logical resources on the node).
       resources:
         simulated_gpu: 8
+    # On-demand floor (2026-09-11). Three full-fleet spot reclaims overnight on
+    # 09-11 took every worker at once and left the service at 0 healthy replicas
+    # for ~45s each (all workers were c6i.4xlarge spot in one pool); the 60s drain
+    # protected in-flight requests but new ones had no replica to land on. This
+    # block holds the idle baseline (41 replicas fit on 2 nodes), so at idle the
+    # autoscaler launches no spot and every baseline replica sits on capacity AWS
+    # cannot reclaim; under load the spot types above carry the burst tier.
+    # min == max: fixed block, never grows on-demand for load. Plain ON_DEMAND,
+    # not PREFER_SPOT, so the 60-minute replacer leaves it alone.
+    - name: cpu-gpu-sim-od
+      instance_type: c6i.4xlarge
+      min_nodes: 2
+      max_nodes: 2
+      market_type: ON_DEMAND
+      resources:
+        simulated_gpu: 8
+      # Long-lived on-demand worker: exempt it from the 12h cost-GC reaper
+      # (custodian-gc-instances stops untagged on-demand instances older than
+      # 12h) the same way the head node is. The spot workers above stay
+      # reapable on purpose -- see the note above worker_nodes.
+      advanced_instance_config:
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: ttl-hours
+                Value: "8760"  # 1 year
+    # Second spot pool (2026-09-11). Same Ice Lake cores as c6i so P99
+    # measurements stay comparable; one pool's reclaim no longer hits the whole
+    # fleet, and it gives the replacer somewhere to land during the c6i.4xlarge
+    # InsufficientInstanceCapacity stretches seen on 08-31.
+    - name: cpu-gpu-sim-alt
+      instance_type: m6i.4xlarge
+      min_nodes: 0
+      max_nodes: 49
+      market_type: PREFER_SPOT
+      resources:
+        simulated_gpu: 8
 
 # Omit http_options.host/port and grpc_options.port — set by Anyscale.
 http_options:
