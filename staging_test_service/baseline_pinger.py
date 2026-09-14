@@ -53,11 +53,12 @@ MIN_INTERVAL_S = {"heavy": 0.5}
 # drops out of Grafana's metric browser) and reflects stalls, not just the target N.
 POOL_INFLIGHT_EMIT_S = 2.0
 # Histogram bucket upper bounds (s) for baseline_pinger_request_latency_seconds.
-# Log-spaced 5 ms -> 150 s so ONE metric covers echo (~ms) through long-runner
-# (30-120 s). 150 == the per-attempt client timeout (traffic_model timeout_s),
-# so observations landing in +Inf are exactly the timed-out attempts.
+# Log-spaced 5 ms -> 30 s so ONE metric covers echo (~ms) through stream-chat
+# (2-15 s). The server answers or 408s within 26-28 s, and 30 == the per-attempt
+# client timeout (traffic_model timeout_s), so observations landing in +Inf are
+# exactly the timed-out attempts. (Was 150 while long-runner, 30-120 s, existed.)
 LATENCY_BUCKETS_S = [0.005, 0.01, 0.025, 0.05, 0.1, 0.15, 0.25, 0.5,
-                     1, 2, 3, 5, 10, 15, 30, 60, 90, 120, 150]
+                     1, 2, 3, 5, 10, 15, 20, 25, 30]
 
 # The discriminating message, verbatim from every observed traceback of the
 # known uvloop bare-FIN truncation (uvloop#471 / uvloop PR#661).

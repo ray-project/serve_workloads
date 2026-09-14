@@ -34,10 +34,18 @@ compute_config:
           Tags:
             - Key: ttl-hours
               Value: "8760"  # 1 year
-  # Deliberately no ttl-hours on the worker groups: worker loss is tolerated
-  # (Risk 7 below) and these two scale 0-150 and 0-49, so exempting them would
-  # take a ~199-node fleet out of cost GC and leave any leaked worker running
-  # forever. They live well under the reaper's 12h floor at min_nodes: 0.
+  # ttl-hours on EVERY worker group (2026-09-14). The original plan left the spot
+  # groups reapable ("they live well under the reaper's 12h floor at
+  # min_nodes: 0"); that premise was false. Serve never moves replicas, so the
+  # spot nodes that carry baseline replicas when a load test scales down live
+  # until something kills them, and custodian-gc-instances-spot *terminates*
+  # (not stops) every untagged spot instance older than 12h at :05 past the hour
+  # (08-20 UTC). Four such kills so far (09-05, 09-06 x2, 09-13 08:05Z), each an
+  # abrupt multi-node loss under live traffic: in-flight requests on the dead
+  # nodes' HAProxies hang until the client gives up (ALB idle timeout is 3600s),
+  # and any deployment whose replicas all sat on those nodes 503s until Serve
+  # re-creates them. Leaked-worker backstop is now the instance manager's own
+  # cluster termination plus the head node's lifetime, not the cost reaper.
   worker_nodes:
     # c6i.4xlarge (16 vCPU / 32 GiB, $0.68/h) replaces m5.4xlarge (16 vCPU /
     # 64 GiB, $0.768/h) — 2026-08-21 right-sizing: measured worker memory peak
@@ -52,6 +60,12 @@ compute_config:
       # PREFER_SPOT (design §3.1/§11, Risk 7). Depends on the compressed ladder
       # and warm floors in this branch -- do not revert this line on its own.
       market_type: PREFER_SPOT
+      advanced_instance_config:
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: ttl-hours
+                Value: "8760"  # 1 year
     - name: cpu-gpu-sim
       instance_type: c6i.4xlarge
       min_nodes: 0
@@ -64,6 +78,55 @@ compute_config:
       # Expose simulated_gpu on this group (logical resources on the node).
       resources:
         simulated_gpu: 8
+      advanced_instance_config:
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: ttl-hours
+                Value: "8760"  # 1 year
+    # On-demand floor (2026-09-11). Three full-fleet spot reclaims overnight on
+    # 09-11 took every worker at once and left the service at 0 healthy replicas
+    # for ~45s each (all workers were c6i.4xlarge spot in one pool); the 60s drain
+    # protected in-flight requests but new ones had no replica to land on. This
+    # block holds the idle baseline (41 replicas fit on 2 nodes), so at idle the
+    # autoscaler launches no spot and every baseline replica sits on capacity AWS
+    # cannot reclaim; under load the spot types above carry the burst tier.
+    # min == max: fixed block, never grows on-demand for load. Plain ON_DEMAND,
+    # not PREFER_SPOT, so the 60-minute replacer leaves it alone.
+    - name: cpu-gpu-sim-od
+      instance_type: c6i.4xlarge
+      min_nodes: 2
+      max_nodes: 2
+      market_type: ON_DEMAND
+      resources:
+        simulated_gpu: 8
+      # Long-lived on-demand worker: exempt it from the 12h cost-GC reaper
+      # (custodian-gc-instances stops untagged on-demand instances older than
+      # 12h) the same way the head node is. Since 2026-09-14 the spot groups
+      # carry the same tag -- see the note above worker_nodes.
+      advanced_instance_config:
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: ttl-hours
+                Value: "8760"  # 1 year
+    # Second spot pool (2026-09-11). Same Ice Lake cores as c6i so P99
+    # measurements stay comparable; one pool's reclaim no longer hits the whole
+    # fleet, and it gives the replacer somewhere to land during the c6i.4xlarge
+    # InsufficientInstanceCapacity stretches seen on 08-31.
+    - name: cpu-gpu-sim-alt
+      instance_type: m6i.4xlarge
+      min_nodes: 0
+      max_nodes: 49
+      market_type: PREFER_SPOT
+      resources:
+        simulated_gpu: 8
+      advanced_instance_config:
+        TagSpecifications:
+          - ResourceType: instance
+            Tags:
+              - Key: ttl-hours
+                Value: "8760"  # 1 year
 
 # Omit http_options.host/port and grpc_options.port — set by Anyscale.
 http_options:
