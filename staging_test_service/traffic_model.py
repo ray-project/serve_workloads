@@ -91,11 +91,15 @@ class Endpoint:
     json_factory: Optional[Callable[[], dict]] = None
     data_factory: Optional[Callable[[], bytes]] = None
     headers_factory: Optional[Callable[[], Dict[str, str]]] = None
-    # Client-side total timeout for ONE request attempt. ~2x worst healthy
-    # latency: a stuck request must release its in-flight slot quickly, or
-    # rate generators stall on it. long covers the 125s max sleep + cold
-    # start while staying under the proxy's request_timeout_s=180.
-    timeout_s: float = 10.0
+    # Client-side total timeout for ONE request attempt (pinger only; Locust
+    # has its own). Sits just above the server's own ceiling -- Serve
+    # request_timeout_s=26 and HAProxy timeout server=28 -- so anything the
+    # service can still answer surfaces as its real status (408/504) and the
+    # client timeout fires only on transport hangs: a request forwarded to a
+    # node that was terminated mid-flight gets no RST and no ALB error (idle
+    # timeout 3600s), so this number is the ONLY bound on it. 150s here hid a
+    # 4-node kill on 2026-09-13 as one silent 150s stall per endpoint.
+    timeout_s: float = 30.0
 
 
 # Weights = the request-level mix derived from locustfile.py personas:
@@ -104,18 +108,18 @@ class Endpoint:
 # tail by design (this is a *realistic baseline*, not endpoint coverage).
 # gRPC-canary is omitted — HTTP-only for v1; Locust still covers gRPC.
 ENDPOINTS: List[Endpoint] = [
-    Endpoint("highscale", "GET",  "/highscale/",       76.0, timeout_s=150.0),
-    Endpoint("echo",      "GET",  "/echo/",            22.0, timeout_s=150.0),
-    Endpoint("mux",       "POST", "/mux/",              0.75, json_factory=mux_payload, headers_factory=mux_headers, timeout_s=150.0),
-    Endpoint("stream",    "POST", "/stream-chat/",      0.20, json_factory=stream_payload, timeout_s=150.0),
-    # Composition chains cold-start hop-by-hop from zero on deploy; give them
-    # headroom above that window so a cold-start is a slow success, not a timeout.
-    Endpoint("nlp",       "POST", "/nlp-chain/",        0.14, data_factory=nlp_payload, timeout_s=150.0),
-    Endpoint("image",     "POST", "/image-dag/",        0.09, data_factory=image_payload, timeout_s=150.0),  # 4 stages, deepest
-    Endpoint("fanout",    "POST", "/cpu-fanout/",       0.09, data_factory=fanout_payload, timeout_s=150.0),
-    Endpoint("batch",     "POST", "/batch-infer/",      0.08, json_factory=batch_payload, timeout_s=150.0),
-    Endpoint("mixed",     "POST", "/mixed-preprocess/", 0.05, data_factory=mixed_payload, timeout_s=150.0),  # composition chain
-    Endpoint("heavy",     "POST", "/heavy-payload/",    0.015, json_factory=heavy_payload, timeout_s=150.0),
+    Endpoint("highscale", "GET",  "/highscale/",       76.0, timeout_s=30.0),
+    Endpoint("echo",      "GET",  "/echo/",            22.0, timeout_s=30.0),
+    Endpoint("mux",       "POST", "/mux/",              0.75, json_factory=mux_payload, headers_factory=mux_headers, timeout_s=30.0),
+    Endpoint("stream",    "POST", "/stream-chat/",      0.20, json_factory=stream_payload, timeout_s=30.0),
+    # Composition chains cold-start hop-by-hop from zero on deploy; the server's
+    # 26s request_timeout_s bounds that, so no extra client headroom is needed.
+    Endpoint("nlp",       "POST", "/nlp-chain/",        0.14, data_factory=nlp_payload, timeout_s=30.0),
+    Endpoint("image",     "POST", "/image-dag/",        0.09, data_factory=image_payload, timeout_s=30.0),  # 4 stages, deepest
+    Endpoint("fanout",    "POST", "/cpu-fanout/",       0.09, data_factory=fanout_payload, timeout_s=30.0),
+    Endpoint("batch",     "POST", "/batch-infer/",      0.08, json_factory=batch_payload, timeout_s=30.0),
+    Endpoint("mixed",     "POST", "/mixed-preprocess/", 0.05, data_factory=mixed_payload, timeout_s=30.0),  # composition chain
+    Endpoint("heavy",     "POST", "/heavy-payload/",    0.015, json_factory=heavy_payload, timeout_s=30.0),
     # long-runner disabled 2026-08-31; the route would 404. Re-enable with the app.
     # Endpoint("long",      "POST", "/long-runner/",      0.009, json_factory=long_payload, timeout_s=150.0),
 ]
