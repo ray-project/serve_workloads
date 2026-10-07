@@ -13,6 +13,10 @@ from serve_validation.config import _with_floor, AUTOSCALE_SPIKY_T2
 router_opts = dict(
     name="cpu-fanout-router",
     autoscaling_config=_with_floor(AUTOSCALE_SPIKY_T2, 64, 2),
+    # One replica per node, so a single node loss can't take both floor
+    # replicas. The router peaks at a handful of replicas; the workers and the
+    # aggregator scale into the tens and stay uncapped.
+    max_replicas_per_node=1,
     ray_actor_options=actor_options(num_cpus=0.5),
     health_check_period_s=10,
     health_check_timeout_s=60,
