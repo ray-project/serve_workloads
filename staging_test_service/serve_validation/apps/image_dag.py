@@ -15,6 +15,9 @@ def _opts(name: str, max_r: int, sim_gpu: bool):
     return dict(
         name=name,
         autoscaling_config=_with_floor(AUTOSCALE_DECLINE, max_r, 2),
+        # One replica per node, so a single node loss can't take both floor
+        # replicas. All four stages peak at a few replicas.
+        max_replicas_per_node=1,
         ray_actor_options=actor_options(num_cpus=0.5, simulated_gpu=sim_gpu),
         health_check_period_s=10,
         health_check_timeout_s=30,
