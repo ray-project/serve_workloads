@@ -1,9 +1,4 @@
-"""App 5: mux-model-router — HAProxy-safe chain: HTTP ingress → multiplexed worker.
-
-Ray Serve's HAProxy path does not preserve multiplexed-model routing; the ingress
-deployment receives HTTP from HAProxy and forwards to the worker with
-``DeploymentHandle.options(multiplexed_model_id=...)`` so affinity stays correct.
-"""
+"""App 5: mux-model-router with multiplexed ingress and worker routing."""
 
 from __future__ import annotations
 
@@ -30,7 +25,11 @@ class _FakeModel:
         self._buf = bytearray(random.randint(1024, 8192))
 
     def predict(self, payload: Dict[str, Any]) -> Dict[str, Any]:
-        return {"model_id": self.model_id, "echo": payload.get("q", ""), "sz": len(self._buf)}
+        return {
+            "model_id": self.model_id,
+            "echo": payload.get("q", ""),
+            "sz": len(self._buf),
+        }
 
 
 _ingress_opts = dict(
@@ -47,7 +46,9 @@ _worker_opts = dict(
     name="mux-model-worker",
     # Floor 1 -> 2: on spot. The 20-model prewarm is only ~3s of a 30s startup.
     autoscaling_config=_with_floor(AUTOSCALE_STABLE_MUX_WORKER, 72, 2),
-    ray_actor_options=actor_options(num_cpus=0.5, simulated_gpu=True),  # 0.5 per design §2
+    ray_actor_options=actor_options(
+        num_cpus=0.5, simulated_gpu=True
+    ),  # 0.5 per design §2
     health_check_period_s=10,
     health_check_timeout_s=30,
     max_ongoing_requests=100,
@@ -57,6 +58,7 @@ _worker_opts = dict(
 # Per-replica multiplexed cache size. Kept at 5 (clients address 20 Zipf-weighted
 # ids), so the ~15-id tail still loads lazily and can evict a resident model.
 _MODELS_PER_REPLICA = 20
+_INGRESS_MODELS_PER_REPLICA = 5
 
 
 @serve.deployment(**_worker_opts)
@@ -92,8 +94,19 @@ class MuxIngress:
     def __init__(self, worker):
         self._worker = worker
 
+    @serve.multiplexed(max_num_models_per_replica=_INGRESS_MODELS_PER_REPLICA)
+    async def load_model_route(self, model_id: str) -> str:
+        return model_id
+
     async def __call__(self, request: Request):
-        model_id = request.headers.get("serve_multiplexed_model_id", "0")
+        header_model_id = request.headers.get("serve_multiplexed_model_id", "0")
+        model_id = serve.get_multiplexed_model_id() or header_model_id
+        if model_id != header_model_id:
+            raise RuntimeError(
+                f"Routed model ID {model_id!r} does not match header {header_model_id!r}."
+            )
+
+        await self.load_model_route(model_id)
         raw = await request.body()
         try:
             body = json.loads(raw.decode("utf-8")) if raw else {}
