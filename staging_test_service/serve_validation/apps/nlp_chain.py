@@ -8,9 +8,13 @@ from starlette.requests import Request
 from serve_validation.common import actor_options, simulate_encoder_ms, simulate_short_cpu_ms
 from serve_validation.config import _with_floor, AUTOSCALE_GROWTH
 
+# Every stage runs one replica per node. With a floor of 2, two replicas on one
+# node mean a single node loss zeroes the stage and its requests time out.
+# Each stage peaks at a few replicas, well under the node count.
 tok_opts = dict(
     name="nlp-tokenizer",
     autoscaling_config=_with_floor(AUTOSCALE_GROWTH, 80, 2),
+    max_replicas_per_node=1,
     ray_actor_options=actor_options(num_cpus=0.5),
     health_check_period_s=10,
     health_check_timeout_s=30,
@@ -19,6 +23,7 @@ tok_opts = dict(
 enc_opts = dict(
     name="nlp-encoder",
     autoscaling_config=_with_floor(AUTOSCALE_GROWTH, 160, 2),
+    max_replicas_per_node=1,
     ray_actor_options=actor_options(num_cpus=0.5, simulated_gpu=True),
     health_check_period_s=10,
     health_check_timeout_s=30,
@@ -27,6 +32,7 @@ enc_opts = dict(
 post_opts = dict(
     name="nlp-postprocessor",
     autoscaling_config=_with_floor(AUTOSCALE_GROWTH, 80, 2),
+    max_replicas_per_node=1,
     ray_actor_options=actor_options(num_cpus=0.5),
     health_check_period_s=10,
     health_check_timeout_s=30,
