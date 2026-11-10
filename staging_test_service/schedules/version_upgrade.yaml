@@ -4,7 +4,14 @@ cron_expression: "0 10 * * 2"
 job_config:
   name: serve-validation-version-upgrade
   project: serve-testing
-  entrypoint: python upgrade_service.py --config-file anyscale_service.yaml --name serve-validation --max-surge-percent 25
+  # Clone main at run time: working_dir is a snapshot uploaded at `schedule apply`,
+  # so without this the job redeploys the anyscale_service.yaml from that day.
+  entrypoint: >-
+    rm -rf /tmp/serve_workloads &&
+    git clone --depth 1 https://github.com/ray-project/serve_workloads /tmp/serve_workloads &&
+    cd /tmp/serve_workloads/staging_test_service &&
+    python upgrade_service.py --config-file anyscale_service.yaml --name serve-validation
+    --max-surge-percent 25 --wait-timeout-s 2400
   image_uri: anyscale/ray:nightly-py310
   env_vars:
     SLACK_WEBHOOK_URL: "${SLACK_WEBHOOK_URL}"
