@@ -11,12 +11,11 @@
 #
 # MULTI-RESOURCE (2026-11-09): the service runs one full cluster per cloud
 # resource of anyscale_v2_default_cloud — vm-aws-us-west-2 (VM),
-# vm-gcp-us-east4 (VM) — with traffic split 3:1. A third resource, AWS EKS
-# (k8s-aws-us-east-2), is BLOCKED until infra raises the staging EKS node
-# group's ~20 GiB root volume to >= 100 GiB: the 7.8 GB cu128 nightly image
-# cannot unpack there and the Ray pods churn disk-pressure eviction loops
-# (attempt 2026-11-09, cluster ses_yfx4c3hvcy8c3xa6qlax8ebyy8). See the EKS
-# TODO in compute_config.configs for the re-add recipe.
+# vm-gcp-us-east4 (VM), k8s-aws-us-east-2 (EKS) — with traffic split 3:1:1.
+# K8S history: the first attempt (2026-11-09) looped disk-pressure evictions
+# because the staging EKS node group's ~20 GiB root volume could not unpack
+# the 7.8 GB cu128 nightly image; infra raised the node-group disk
+# (2026-11-10), and the resource is re-enabled below.
 # Services do NOT fall back across resources (cloud_resource_strategy /
 # cloud_resource_starting_timeout are jobs-only): every listed resource runs
 # all apps below simultaneously and capacity follows traffic_policy. Health:
@@ -198,43 +197,68 @@ compute_config:
           resources:
             simulated_gpu: 8
 
-    # ---------- AWS EKS K8S us-east-2: REMOVED 2026-11-09, pending infra ----------
-    # Attempted with this rollout, never came up: the staging EKS node group
-    # backing the 8CPU-32GB pods has ~20 GiB ephemeral storage and the 7.8 GB
-    # cu128 nightly image cannot unpack ("no space left on device" extracting
-    # cuda-12.8 layers) -> repeated ImagePullBackOff -> kubelet disk-pressure
-    # eviction "low on resource: ephemeral-storage" -> instance terminated ->
-    # relaunched, in a loop until the version is abandoned.
-    # Infra ask in flight: node-group root volume >= 100 GiB. Re-add then:
-    #   - cloud_resource: k8s-aws-us-east-2
-    #     head_node: {instance_type: 4CPU-16GB, resources: {CPU: 0}}
-    #     worker_nodes:
-    #       - {name: cpu-general, instance_type: 8CPU-32GB, min_nodes: 0, max_nodes: 49}
-    #       - {name: cpu-gpu-sim, instance_type: 8CPU-32GB, min_nodes: 0,
-    #          max_nodes: 25, resources: {simulated_gpu: 8}}
-    #       - {name: cpu-gpu-sim-od, instance_type: 8CPU-32GB, min_nodes: 3,
-    #          max_nodes: 3, resources: {simulated_gpu: 8}}   # 3 pods = 24 allocatable
-    #          CPU for the 41 baseline replicas (0.5 CPU each) and 24 sim slots;
-    #          no market_type/advanced_instance_config on K8S; no alt pool (no
-    #          market choice there); head-FT off (no redis_endpoint on this resource)
-    # ...and add k8s-aws-us-east-2: 1 to traffic_policy.static.weights below.
+    # ---------- AWS EKS K8S us-east-2: added 2026-11-09, enabled 2026-11-10 ----------
+    # First attempt died in disk-pressure eviction loops (~20 GiB node root
+    # volume vs the 7.8 GB cu128 image); infra raised the node-group disk to
+    # >= 100 GiB on 2026-11-10, so the resource is back in the service.
+    - cloud_resource: k8s-aws-us-east-2
+      head_node:
+        # 4CPU-16GB = K8S custom instance type matching m7i.xlarge's 4 vCPU /
+        # 16 GiB. Same no-schedulable-CPU-on-head rule (design.md §3.1).
+        instance_type: 4CPU-16GB
+        resources:
+          CPU: 0
+      # K8S notes: instance types are custom pod shapes on this resource
+      # (2CPU-8GB, 4CPU-16GB, 8CPU-32GB, 8CPU-32GB-1xT4; 8 vCPU is the ceiling),
+      # market_type / advanced_instance_config (ttl-hours EC2 tags) do not apply,
+      # underlying node diversity is the operator's machine pools, and head node
+      # FT stays off (no redis_endpoint configured on this resource -- same as
+      # the GCP resource above; only vm-aws-us-west-2 has MemoryDB/MemoryStore).
+      # 8CPU-32GB + simulated_gpu: 8 packs the same 8 sim replicas per pod as a
+      # c6i.4xlarge per node (each replica needs 0.5 CPU + 1 simulated_gpu), so
+      # only half the raw CPU arrives and replica autoscalers spread wider.
+      # Ceiling values below are bounds only; EKS/Karpenter quotas will bind
+      # first -- revisit after the first multi-resource load test.
+      # No alt pool here: pool isolation exists to de-correlate spot reclaims,
+      # and on K8S we cannot choose markets from this config.
+      worker_nodes:
+        - name: cpu-general
+          instance_type: 8CPU-32GB
+          min_nodes: 0
+          max_nodes: 49
+        - name: cpu-gpu-sim
+          instance_type: 8CPU-32GB
+          min_nodes: 0
+          max_nodes: 25
+          resources:
+            simulated_gpu: 8
+        # On-demand floor analog: fixed min == max group so the idle baseline
+        # never depends on burstable capacity (the 41 baseline replicas need
+        # ~20.5 allocatable CPU at 0.5 each, hence 3 pods vs 2 16-vCPU AWS
+        # nodes; simulated_gpu slots are equal: 3x8 = 2 AWS nodes x 8).
+        - name: cpu-gpu-sim-od
+          instance_type: 8CPU-32GB
+          min_nodes: 3
+          max_nodes: 3
+          resources:
+            simulated_gpu: 8
 
-# Multi-resource traffic split, 75/25 (AWS/GCP). Capacity follows traffic:
-# each resource ends up with roughly its share of replicas once apps scale
-# to demand. Weights are relative integers >= 1 covering every resource.
+# Multi-resource traffic split, 60/20/20 (AWS/GCP/EKS). Capacity follows
+# traffic: each resource ends up with roughly its share of replicas once apps
+# scale to demand. Weights are relative integers >= 1 covering every resource.
 # - A deploy WITHOUT this key starts the new version equal-split.
 # - In-place updates ignore this field: each version keeps its own policy.
-# - k8s-aws-us-east-2 rejoins with weight 1 once the EKS node disk is fixed
-#   (recipe in compute_config.configs above) -> back to 3:1:1.
 # Retune live without redeploying:
 #   anyscale service update-traffic-policy -n serve-validation --type static \
-#     --weight vm-aws-us-west-2=3 --weight vm-gcp-us-east4=1
+#     --weight vm-aws-us-west-2=3 --weight vm-gcp-us-east4=1 \
+#     --weight k8s-aws-us-east-2=1
 traffic_policy:
   type: static
   static:
     weights:
       vm-aws-us-west-2: 3
       vm-gcp-us-east4: 1
+      k8s-aws-us-east-2: 1
 
 # Omit http_options.host/port and grpc_options.port — set by Anyscale.
 http_options:
